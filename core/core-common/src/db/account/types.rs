@@ -21,6 +21,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
+use stash::AccountDb;
 use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
 use stash::macros::Model;
 use stash::orm::Model;
@@ -34,6 +35,7 @@ use zeroize::Zeroize;
 
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("core_accounts")]
+#[Database(AccountDb)]
 pub struct CoreAccount {
     #[IdField]
     pub remote_id: UserId,
@@ -87,11 +89,11 @@ impl CoreAccount {
         }
     }
 
-    pub async fn by_primary_seq(tether: &Tether) -> Result<Vec<Self>, StashError> {
+    pub async fn by_primary_seq(tether: &Tether<AccountDb>) -> Result<Vec<Self>, StashError> {
         Self::find("ORDER BY primary_seq DESC", vec![], tether).await
     }
 
-    pub async fn primary_seq_max(tether: &Tether) -> Result<i64, StashError> {
+    pub async fn primary_seq_max(tether: &Tether<AccountDb>) -> Result<i64, StashError> {
         let query = format!("SELECT MAX(primary_seq) FROM {}", Self::table_name());
 
         tether.query_value(query, vec![]).await
@@ -188,7 +190,7 @@ impl CoreAccount {
         }
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<AccountDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
             .await
@@ -243,6 +245,7 @@ impl TableObserver for CoreAccountWatcher {
 
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
 #[TableName("core_sessions")]
+#[Database(AccountDb)]
 pub struct CoreSession {
     #[IdField]
     pub remote_id: SessionId,
@@ -279,7 +282,7 @@ impl CoreSession {
     /// Retrieves all sessions associated with the given account ID.
     pub async fn find_by_user_id(
         user_id: UserId,
-        tether: &Tether,
+        tether: &Tether<AccountDb>,
     ) -> Result<Vec<Self>, StashError> {
         Self::find("WHERE account_id = ?", params![user_id], tether).await
     }
@@ -342,7 +345,7 @@ impl CoreSession {
         })
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<AccountDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(CoreSessionWatcher { sender }))
             .await
@@ -670,12 +673,12 @@ impl From<CoreSession> for CoreSessionObserverValue {
 /// This observer only issues a series of notifications when changes occur in the session table.
 pub struct CoreSessionObserver {
     sessions: HashSet<CoreSessionObserverValue>,
-    stash: Stash,
+    stash: Stash<AccountDb>,
     watcher: WatcherHandle,
 }
 
 impl CoreSessionObserver {
-    pub async fn new(stash: Stash) -> Result<Self, StashError> {
+    pub async fn new(stash: Stash<AccountDb>) -> Result<Self, StashError> {
         let tether = stash.connection().await?;
         let existing = CoreSession::all(&tether)
             .await?

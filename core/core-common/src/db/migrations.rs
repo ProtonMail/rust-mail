@@ -4,20 +4,21 @@ mod tests;
 
 use include_dir::{Dir, include_dir};
 use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
+use stash::AccountDb;
 use stash::stash::Stash;
 
-fn account_db() -> Migrator {
+fn account_db() -> Migrator<AccountDb> {
     const TABLE: &str = "proton_account_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/account");
 
-    Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
+    Migrator::new(TABLE, embedded_migrations::<AccountDb>(&MIGRATIONS))
 }
 
-pub async fn migrate_account_db(stash: &Stash) -> Result<usize, MigratorError> {
+pub async fn migrate_account_db(stash: &Stash<AccountDb>) -> Result<usize, MigratorError> {
     account_db().migrate(&mut stash.connection().await?).await
 }
 
-pub async fn verify_account_db(stash: &Stash) -> Result<(), MigratorError> {
+pub async fn verify_account_db(stash: &Stash<AccountDb>) -> Result<(), MigratorError> {
     account_db().verify(&mut stash.connection().await?).await
 }
 

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use derive_more::derive::TryFrom;
+use stash::AccountDb;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction, Value,
     ValueRef,
@@ -21,6 +22,7 @@ use smart_default::SmartDefault;
 #[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
 #[ModelHooks]
 #[TableName("app_settings")]
+#[Database(AccountDb)]
 pub struct AppSettings {
     #[IdField]
     pub local_id: SingleEntryId,
@@ -87,11 +89,11 @@ impl AppSettings {
         }
     }
 
-    pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
+    pub async fn get(tether: &Tether<AccountDb>) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
     }
 
-    pub async fn get_or_default(tether: &Tether) -> Self {
+    pub async fn get_or_default(tether: &Tether<AccountDb>) -> Self {
         Self::get(tether)
             .await
             .unwrap_or_default()
@@ -234,6 +236,7 @@ impl ToSql for ProtectionAutoLock {
 #[derive(Debug, Clone, PartialEq, Model)]
 #[ModelHooks]
 #[TableName("pin_protection")]
+#[Database(AccountDb)]
 pub struct PinProtection {
     #[IdField]
     pub local_id: SingleEntryId,
@@ -264,7 +267,7 @@ impl PinProtection {
     }
 
     /// Get the pin protection from database
-    pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
+    pub async fn get(tether: &Tether<AccountDb>) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
     }
 

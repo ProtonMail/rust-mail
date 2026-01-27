@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use include_dir::Dir;
+use stash::marker::DatabaseMarker;
 use stash::stash::Bond;
 
 use crate::Migration;
@@ -25,12 +26,12 @@ pub struct EmbeddedFileMigration {
 }
 
 #[async_trait::async_trait]
-impl Migration for EmbeddedFileMigration {
+impl<Db: DatabaseMarker> Migration<Db> for EmbeddedFileMigration {
     fn name(&self) -> &str {
         self.path.to_str().unwrap_or("000_unknown.sql")
     }
 
-    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), stash::stash::StashError> {
+    async fn migrate(&self, tx: &Bond<'_, Db>) -> Result<(), stash::stash::StashError> {
         let statements = self.migration_content.trim();
 
         tx.batch(statements).await?;
@@ -42,7 +43,7 @@ impl Migration for EmbeddedFileMigration {
 /// Loads embedded migrations
 ///
 #[must_use]
-pub fn embedded_migrations(dir: &Dir<'static>) -> Vec<Box<dyn Migration>> {
+pub fn embedded_migrations<Db: DatabaseMarker>(dir: &Dir<'static>) -> Vec<Box<dyn Migration<Db>>> {
     dir.find("**/*.sql")
         .unwrap()
         .filter_map(|entry| entry.as_file())
@@ -51,7 +52,7 @@ pub fn embedded_migrations(dir: &Dir<'static>) -> Vec<Box<dyn Migration>> {
             migration_content: file.contents_utf8().unwrap(),
         })
         .map(|m| {
-            let migration: Box<dyn Migration> = Box::new(m);
+            let migration: Box<dyn Migration<Db>> = Box::new(m);
             migration
         })
         .collect::<Vec<_>>()

@@ -34,6 +34,7 @@ use proton_mail_common::{
 use proton_mail_common::{MailContext, MailContextError};
 use proton_mail_common::{NewMailUserContextOptions, Unexpected};
 use proton_network_monitor_service::OsNetworkStatus as RealOsNetworkStatus;
+use stash::AccountDb;
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
@@ -1174,7 +1175,7 @@ impl MailSession {
     }
 
     #[must_use]
-    pub fn session_stash(&self) -> &Stash {
+    pub fn session_stash(&self) -> &Stash<AccountDb> {
         self.mail_ctx.session_stash()
     }
 }

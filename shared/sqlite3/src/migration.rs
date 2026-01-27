@@ -8,13 +8,14 @@ pub mod file;
 use futures::executor::block_on;
 use itertools::Itertools;
 use stash::exports::SqliteError;
+use stash::marker::{DatabaseMarker, DefaultDb};
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use thiserror::Error;
 use tracing::{Instrument, debug};
 
 #[async_trait::async_trait]
-pub trait Migration: Send + Sync {
+pub trait Migration<Db: DatabaseMarker = DefaultDb>: Send + Sync {
     fn name(&self) -> &str;
 
     fn order_number(&self) -> &str {
@@ -27,7 +28,7 @@ pub trait Migration: Send + Sync {
         order
     }
 
-    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError>;
+    async fn migrate(&self, tx: &Bond<'_, Db>) -> Result<(), StashError>;
 }
 
 #[derive(Debug, Error)]
@@ -45,14 +46,14 @@ pub enum MigratorError {
     Stash(#[from] StashError),
 }
 
-pub struct Migrator {
+pub struct Migrator<Db: DatabaseMarker = DefaultDb> {
     table: String,
-    migrations: Vec<Box<dyn Migration>>,
+    migrations: Vec<Box<dyn Migration<Db>>>,
 }
 
-impl Migrator {
+impl<Db: DatabaseMarker> Migrator<Db> {
     #[must_use]
-    pub fn new(table: &str, mut migrations: Vec<Box<dyn Migration>>) -> Self {
+    pub fn new(table: &str, mut migrations: Vec<Box<dyn Migration<Db>>>) -> Self {
         sort_migrations_and_check_for_conflicts(&mut migrations);
 
         Self {
@@ -64,7 +65,7 @@ impl Migrator {
     /// Migrates database to the newest version.
     ///
     /// See: [`Self::verify()`].
-    pub async fn migrate(&self, tether: &mut Tether) -> Result<usize, MigratorError> {
+    pub async fn migrate(&self, tether: &mut Tether<Db>) -> Result<usize, MigratorError> {
         let expected_version = get_expected_version(&self.migrations);
         let current_version = get_current_version(tether, &self.table).await?;
         if let Some(current_version) = current_version
@@ -103,7 +104,7 @@ impl Migrator {
     /// Note that this function does not run any migrations.
     ///
     /// See: [`Self::migrate()`].
-    pub async fn verify(&self, tether: &mut Tether) -> Result<(), MigratorError> {
+    pub async fn verify(&self, tether: &mut Tether<Db>) -> Result<(), MigratorError> {
         tether
             .tx(async |tx| {
                 let got = get_current_version(tx, &self.table).await?;
@@ -119,12 +120,12 @@ impl Migrator {
     }
 }
 
-fn get_expected_version(m: &[Box<dyn Migration>]) -> usize {
+fn get_expected_version<Db: DatabaseMarker>(m: &[Box<dyn Migration<Db>>]) -> usize {
     m.len()
 }
 
-async fn get_current_version(
-    tether: &Tether,
+async fn get_current_version<Db: DatabaseMarker>(
+    tether: &Tether<Db>,
     table_name: &str,
 ) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) FROM sqlite_master WHERE `type`='table' AND name= ?";
@@ -144,7 +145,10 @@ const VERSION_TABLE_FIELD_ID: &str = "id";
 const VERSION_TABLE_FIELD_VERSION: &str = "version";
 const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-async fn read_current_version(tether: &Tether, id: &str) -> Result<usize, StashError> {
+async fn read_current_version<Db: DatabaseMarker>(
+    tether: &Tether<Db>,
+    id: &str,
+) -> Result<usize, StashError> {
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
@@ -168,7 +172,7 @@ async fn read_current_version(tether: &Tether, id: &str) -> Result<usize, StashE
     Ok(version as usize)
 }
 
-async fn create_version_table(tx: &Bond<'_>) -> Result<(), StashError> {
+async fn create_version_table<Db: DatabaseMarker>(tx: &Bond<'_, Db>) -> Result<(), StashError> {
     let query = format!(
         "CREATE TABLE {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID} TEXT UNIQUE NOT NULL PRIMARY KEY, \
 {VERSION_TABLE_FIELD_VERSION} INTEGER NOT NULL)"
@@ -177,7 +181,11 @@ async fn create_version_table(tx: &Bond<'_>) -> Result<(), StashError> {
     Ok(())
 }
 
-async fn set_current_version(tx: &Bond<'_>, id: &str, version: usize) -> Result<(), StashError> {
+async fn set_current_version<Db: DatabaseMarker>(
+    tx: &Bond<'_, Db>,
+    id: &str,
+    version: usize,
+) -> Result<(), StashError> {
     let query = format!(
         "INSERT INTO {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
 ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION}=excluded.{VERSION_TABLE_FIELD_VERSION}"
@@ -186,11 +194,11 @@ ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION
     Ok(())
 }
 
-async fn run_migrations(
-    tx: &Bond<'_>,
+async fn run_migrations<Db: DatabaseMarker>(
+    tx: &Bond<'_, Db>,
     table_name: &str,
     current_version: usize,
-    migrations: &[Box<dyn Migration>],
+    migrations: &[Box<dyn Migration<Db>>],
 ) -> Result<(), StashError> {
     for (i, m) in migrations.iter().enumerate().skip(current_version) {
         let span = tracing::debug_span!("migration", version = i, name = m.name());
@@ -218,7 +226,9 @@ async fn run_migrations(
 /// This function sorts by the order number and panics, if there are `0001_a.sql` and `0001_b.sql`. Such a conflict indicates, that the
 /// ordering is undecidable and it's developer's responsibility to rename one of the files.
 ///
-fn sort_migrations_and_check_for_conflicts(migrations: &mut [Box<dyn Migration>]) {
+fn sort_migrations_and_check_for_conflicts<Db: DatabaseMarker>(
+    migrations: &mut [Box<dyn Migration<Db>>],
+) {
     migrations.sort_by_key(|m| m.order_number().to_string());
 
     for (a, b) in migrations.iter().tuple_windows() {

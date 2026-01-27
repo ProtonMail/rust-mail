@@ -8,6 +8,7 @@ use proton_core_api::services::proton::User;
 use proton_event_loop::v6::{EventSource, EventSubscriber};
 use proton_event_loop::{EventSubscriberError, EventSubscriberResult, RefreshFlag};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
+use stash::AccountDb;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 use std::sync::Weak;
@@ -114,7 +115,7 @@ pub(crate) async fn handle_user_refresh(
         })
 }
 
-async fn update_account_data(user: &User, tx: &Bond<'_>) -> Result<(), StashError> {
+async fn update_account_data(user: &User, tx: &Bond<'_, AccountDb>) -> Result<(), StashError> {
     if let Some(account) = CoreAccount::load(user.id.clone(), tx).await? {
         account
             .with_display_name(user.display_name.clone().unwrap_or_default())

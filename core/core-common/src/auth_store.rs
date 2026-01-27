@@ -10,6 +10,7 @@ use proton_core_api::auth::{Auth, Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::store::{AuthInfo, Store, StoreError, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
+use stash::AccountDb;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::ops::Deref;
@@ -18,7 +19,7 @@ use tracing::{error, info, warn};
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
-    stash: Stash,
+    stash: Stash<AccountDb>,
     key_chain: Arc<dyn KeyChain>,
     user_id: Option<UserId>,
     session_id: Option<SessionId>,
@@ -27,7 +28,7 @@ pub struct AuthStore {
 
 impl AuthStore {
     pub fn new(
-        stash: Stash,
+        stash: Stash<AccountDb>,
         key_chain: Arc<dyn KeyChain>,
         user_id: Option<UserId>,
         session_id: Option<SessionId>,

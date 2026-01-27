@@ -2,6 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use proton_core_api::services::proton::UserId;
 use proton_core_common::{Context, migration_snooper::MigrationSnooper};
+use stash::AccountDb;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
@@ -49,6 +50,7 @@ impl MigrationSnooper for MailMigrationSnooper {
 
 #[derive(Clone, Debug, PartialEq, Model)]
 #[TableName("post_login_mobile_migration")]
+#[Database(AccountDb)]
 pub struct PostLoginMobileMigrationPayload {
     #[IdField]
     pub user_id: UserId,
@@ -65,7 +67,7 @@ pub struct PostLoginMobileMigrationPayload {
 
 impl PostLoginMobileMigrationPayload {
     #[instrument(skip_all)]
-    pub async fn load(id: &UserId, tether: &Tether) -> Result<Option<Self>, StashError> {
+    pub async fn load(id: &UserId, tether: &Tether<AccountDb>) -> Result<Option<Self>, StashError> {
         let exists: Option<i32> = tether
             .query_value_opt(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='post_login_mobile_migration'",
@@ -81,7 +83,7 @@ impl PostLoginMobileMigrationPayload {
     }
 
     #[instrument(skip_all)]
-    pub async fn save(mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn save(mut self, bond: &Bond<'_, AccountDb>) -> Result<(), StashError> {
         bond.execute(
             "CREATE TABLE IF NOT EXISTS post_login_mobile_migration (
                 user_id STRING PRIMARY KEY,
