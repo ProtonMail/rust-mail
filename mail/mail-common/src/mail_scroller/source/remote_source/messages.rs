@@ -1,6 +1,6 @@
 use super::{MailPaginatorJoinHandle, RemoteSource, utils};
 use crate::datatypes::MessageLabelsCount;
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
 use crate::models::LabelExt;
@@ -432,7 +432,7 @@ impl RemoteMessageScrollerSource {
         queue: &Queue,
     ) -> Result<Vec<Message>, MailContextError> {
         // Resolve missing dependencies.
-        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let mut dependency_fetcher = DependencyFetcher::new();
         for message in api_messages.iter() {
             dependency_fetcher
                 .check_api_message_metadata(message, tether)

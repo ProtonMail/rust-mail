@@ -21,7 +21,7 @@ use stash::orm::Model;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
 // Import common macros from core
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::events::v6;
 use crate::user_context::events::event_model::MailEvent;
 use crate::user_context::events::event_source::MailEventSourceV5;
@@ -316,8 +316,8 @@ impl MailUserContext {
 async fn calculate_missing_dependencies(
     event: &MailEvent,
     tether: &Tether,
-) -> Result<MessageOrConversationDependencyFetcher, MailContextError> {
-    let mut fetcher = MessageOrConversationDependencyFetcher::new();
+) -> Result<DependencyFetcher, MailContextError> {
+    let mut fetcher = DependencyFetcher::new();
     if let Some(conversation_events) = &event.conversations {
         for conversation_event in conversation_events {
             if let Some(conversation) = conversation_event.conversation.as_ref() {

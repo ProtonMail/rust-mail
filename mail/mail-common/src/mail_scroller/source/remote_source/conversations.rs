@@ -1,7 +1,7 @@
 use super::{MailPaginatorJoinHandle, RemoteSource, utils};
 use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::DeletedItemType;
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::datatypes::labels::ScrollOrderDir;
 use crate::datatypes::labels::ScrollOrderField;
 use crate::models::DeletedItem;
@@ -523,7 +523,7 @@ impl RemoteConversationScrollerSource {
         queue: &Queue,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.
-        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let mut dependency_fetcher = DependencyFetcher::new();
         for conversation in conversations.iter() {
             dependency_fetcher
                 .check_conversation(conversation, tether)

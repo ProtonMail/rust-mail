@@ -1,6 +1,6 @@
 use super::MailPaginatorJoinHandle;
 use crate::AppError;
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::datatypes::labels::ScrollOrderField;
 use crate::models::MailBusyLabel;
 use crate::{
@@ -260,7 +260,7 @@ impl SearchScrollerSource {
         }
 
         // Resolve missing dependencies.
-        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let mut dependency_fetcher = DependencyFetcher::new();
         for message in api_messages.iter() {
             dependency_fetcher
                 .check_api_message_metadata(message, tether)

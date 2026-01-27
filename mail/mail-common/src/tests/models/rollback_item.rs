@@ -470,3 +470,275 @@ async fn test_rollback_skips_nonexistent_conversation() {
         "All rollback items should be deleted after sync"
     );
 }
+
+#[tokio::test]
+async fn test_label_rollback_with_parent_dependencies() {
+    use proton_core_api::services::proton::LabelType;
+
+    let (stash, _tempdir) = new_test_connection_file().await;
+    let mut tether = stash.connection().await.unwrap();
+    let queue = Queue::new(stash.clone()).await.unwrap();
+
+    // Set up a label hierarchy: grandparent -> parent -> child
+    let grandparent_id = "grandparent_123";
+    let parent_id = "parent_456";
+    let child_id = "child_789";
+
+    // Only the child label is marked for rollback
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            RollbackItem::new(child_id.to_string(), RollbackItemType::Label)
+                .save(tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let items = RollbackItem::all(&tether).await.unwrap();
+    assert_eq!(items.len(), 1);
+
+    let mock_server = MockServer::start().await;
+    mock_auth_endpoints(&mock_server).await;
+
+    let api = {
+        let config = Config {
+            env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
+            ..Default::default()
+        };
+        Session::builder()
+            .with_config(config)
+            .build()
+            .await
+            .unwrap()
+    };
+
+    // Mock the child label fetch (has parent dependency)
+    Mock::given(method("POST"))
+        .and(path("/api/core/v4/labels/by-ids"))
+        .and(body_json(GetLabelsByIdsOptions {
+            label_ids: vec![LabelId::from(child_id.to_string())],
+        }))
+        .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
+            labels: vec![api_label!(
+                id: child_id.to_string().into(),
+                parent_id: Some(parent_id.to_string().into()),
+                name: "Child Label".to_string(),
+                label_type: LabelType::Folder
+            )],
+        }))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    // Mock the parent label fetch (has grandparent dependency)
+    Mock::given(method("POST"))
+        .and(path("/api/core/v4/labels/by-ids"))
+        .and(body_json(GetLabelsByIdsOptions {
+            label_ids: vec![LabelId::from(parent_id.to_string())],
+        }))
+        .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
+            labels: vec![api_label!(
+                id: parent_id.to_string().into(),
+                parent_id: Some(grandparent_id.to_string().into()),
+                name: "Parent Label".to_string(),
+                label_type: LabelType::Folder
+            )],
+        }))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    // Mock the grandparent label fetch (no parent dependency)
+    Mock::given(method("POST"))
+        .and(path("/api/core/v4/labels/by-ids"))
+        .and(body_json(GetLabelsByIdsOptions {
+            label_ids: vec![LabelId::from(grandparent_id.to_string())],
+        }))
+        .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
+            labels: vec![api_label!(
+                id: grandparent_id.to_string().into(),
+                parent_id: None,
+                name: "Grandparent Label".to_string(),
+                label_type: LabelType::Folder
+            )],
+        }))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let result = RollbackItem::sync_all(&api, &mut tether, None, &queue).await;
+    assert!(result.is_ok(), "sync_all should succeed: {result:?}");
+
+    // Verify all rollback items were processed
+    let remaining = RollbackItem::all(&tether).await.unwrap();
+    assert_eq!(
+        remaining.len(),
+        0,
+        "All rollback items should be deleted after sync"
+    );
+
+    // Verify all three labels were stored in the database
+    // Note: Only count the labels we created, not system labels
+    let our_label_ids = [
+        LabelId::from(child_id.to_string()),
+        LabelId::from(parent_id.to_string()),
+        LabelId::from(grandparent_id.to_string()),
+    ];
+    let our_labels = Label::all(&tether)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|l| our_label_ids.contains(l.remote_id.as_ref().unwrap()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        our_labels.len(),
+        3,
+        "All three labels (child, parent, grandparent) should be stored"
+    );
+
+    // Verify the labels have correct parent relationships
+    let child_label = Label::find_by_remote_id(LabelId::from(child_id.to_string()), &tether)
+        .await
+        .unwrap()
+        .expect("Child label should exist");
+    assert_eq!(
+        child_label.remote_parent_id,
+        Some(LabelId::from(parent_id.to_string())),
+        "Child should reference parent"
+    );
+
+    let parent_label = Label::find_by_remote_id(LabelId::from(parent_id.to_string()), &tether)
+        .await
+        .unwrap()
+        .expect("Parent label should exist");
+    assert_eq!(
+        parent_label.remote_parent_id,
+        Some(LabelId::from(grandparent_id.to_string())),
+        "Parent should reference grandparent"
+    );
+
+    let grandparent_label =
+        Label::find_by_remote_id(LabelId::from(grandparent_id.to_string()), &tether)
+            .await
+            .unwrap()
+            .expect("Grandparent label should exist");
+    assert_eq!(
+        grandparent_label.remote_parent_id, None,
+        "Grandparent should have no parent"
+    );
+}
+
+#[tokio::test]
+async fn test_label_rollback_with_circular_parent_reference() {
+    use proton_core_api::services::proton::LabelType;
+
+    let (stash, _tempdir) = new_test_connection_file().await;
+    let mut tether = stash.connection().await.unwrap();
+    let queue = Queue::new(stash.clone()).await.unwrap();
+
+    // Set up labels where child's parent is also being rolled back (circular reference)
+    let parent_id = "parent_123";
+    let child_id = "child_456";
+
+    // Both labels are marked for rollback
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            RollbackItem::new(parent_id.to_string(), RollbackItemType::Label)
+                .save(tx)
+                .await
+                .unwrap();
+            RollbackItem::new(child_id.to_string(), RollbackItemType::Label)
+                .save(tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let mock_server = MockServer::start().await;
+    mock_auth_endpoints(&mock_server).await;
+
+    let api = {
+        let config = Config {
+            env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
+            ..Default::default()
+        };
+        Session::builder()
+            .with_config(config)
+            .build()
+            .await
+            .unwrap()
+    };
+
+    // Mock the initial fetch of both labels being rolled back
+    Mock::given(method("POST"))
+        .and(path("/api/core/v4/labels/by-ids"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
+            labels: vec![
+                api_label!(
+                    id: parent_id.to_string().into(),
+                    parent_id: None,
+                    name: "Parent Label".to_string(),
+                    label_type: LabelType::Folder
+                ),
+                api_label!(
+                    id: child_id.to_string().into(),
+                    parent_id: Some(parent_id.to_string().into()),
+                    name: "Child Label".to_string(),
+                    label_type: LabelType::Folder
+                ),
+            ],
+        }))
+        .expect(1) // Only called once since parent is already in the rollback set
+        .mount(&mock_server)
+        .await;
+
+    let result = RollbackItem::sync_all(&api, &mut tether, None, &queue).await;
+    assert!(result.is_ok(), "sync_all should succeed: {result:?}");
+
+    // Verify all rollback items were processed
+    let remaining = RollbackItem::all(&tether).await.unwrap();
+    assert_eq!(
+        remaining.len(),
+        0,
+        "All rollback items should be deleted after sync"
+    );
+
+    // Verify both labels were stored
+    // Note: Only count the labels we created, not system labels
+    let our_label_ids = [
+        LabelId::from(parent_id.to_string()),
+        LabelId::from(child_id.to_string()),
+    ];
+    let our_labels = Label::all(&tether)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|l| our_label_ids.contains(l.remote_id.as_ref().unwrap()))
+        .collect::<Vec<_>>();
+    assert_eq!(our_labels.len(), 2, "Both labels should be stored");
+
+    // Verify the child's parent reference is intact
+    // When both parent and child are rolled back together, their relationship should be preserved
+    let child_label = Label::find_by_remote_id(LabelId::from(child_id.to_string()), &tether)
+        .await
+        .unwrap()
+        .expect("Child label should exist");
+    assert_eq!(
+        child_label.remote_parent_id,
+        Some(LabelId::from(parent_id.to_string())),
+        "Child's parent reference should be preserved when both are rolled back together"
+    );
+
+    let parent_label = Label::find_by_remote_id(LabelId::from(parent_id.to_string()), &tether)
+        .await
+        .unwrap()
+        .expect("Parent label should exist");
+    assert_eq!(
+        parent_label.remote_parent_id, None,
+        "Parent should have no parent"
+    );
+}
