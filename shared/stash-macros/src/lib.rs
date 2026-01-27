@@ -260,7 +260,7 @@ RETURNING {id_field}
 
         let update_query = format!(
             "
-UPDATE {table} 
+UPDATE {table}
 SET {update_fields}
 WHERE {id_field} = ?
 ",
@@ -525,7 +525,7 @@ fn extract_database_marker(input: &DeriveInput) -> TokenStream2 {
                 None
             }
         })
-        .unwrap_or_else(|| quote! { ::stash::marker::DefaultDb })
+        .unwrap_or_else(|| quote! { ::stash::marker::UserDb })
 }
 
 /// Extract attributes with a `via` argument from the struct fields.

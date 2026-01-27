@@ -11,7 +11,7 @@ use proton_core_api::services::proton::ProtonIdMarker;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::{ConversationId, MessageId};
-use stash::DefaultDb;
+use stash::UserDb;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -24,9 +24,9 @@ use typed_builder::TypedBuilder;
 
 pub trait ScrollData
 where
-    Self: Model<Database = DefaultDb> + Into<ScrollCursor<Self>>,
+    Self: Model<Database = UserDb> + Into<ScrollCursor<Self>>,
 {
-    type Model: ModelExtension<Database = DefaultDb>;
+    type Model: ModelExtension<Database = UserDb>;
     type Item: MailScrollerItem;
     type RemoteId: ProtonIdMarker;
 
@@ -34,7 +34,7 @@ where
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         order_dir: ScrollOrderDir,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
         async move {
             Self::find_first(
@@ -51,7 +51,7 @@ where
     fn total(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> impl Future<Output = Result<u64, AppError>> + Send;
 
     #[allow(clippy::too_many_arguments)]
@@ -175,7 +175,7 @@ impl ScrollData for MessageScrollData {
     async fn total(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<u64, AppError> {
         // HACK MessageCounters get updated by event loop even if the label is
         //      busy - for our purposes, we need to short-circuit that to zero,
@@ -456,7 +456,7 @@ impl ScrollData for ConversationScrollData {
     async fn total(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<u64, AppError> {
         // HACK ConversationCounters get updated by event loop even if the label
         //      is busy - for our purposes, we need to short-circuit that to
@@ -722,13 +722,13 @@ impl<T: ScrollData> ScrollCursor<T> {
         }
     }
 
-    pub async fn seen_count(&self, tether: &Tether<DefaultDb>) -> Result<u64, StashError> {
+    pub async fn seen_count(&self, tether: &Tether<UserDb>) -> Result<u64, StashError> {
         ScrollQuery::new(self.clone()).count(tether).await
     }
 
     pub async fn visible_elements(
         &self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<T::Item>, StashError> {
         self.visible_elements_ex(None, None, false, tether).await
     }
@@ -738,7 +738,7 @@ impl<T: ScrollData> ScrollCursor<T> {
         limit: Option<usize>,
         offset: Option<u64>,
         require_remote_id: bool,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<T::Item>, StashError> {
         ScrollQuery::new(self.clone())
             .with_limit(limit)
@@ -761,7 +761,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Option<Self>, StashError> {
         let order_dir = ScrollOrderDir::for_local_label(local_label_id, tether).await?;
         let order_field = ScrollOrderField::for_local_label(local_label_id, tether).await?;
@@ -809,7 +809,7 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     pub async fn fetch_more(
         &mut self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<T::Item>, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
@@ -846,7 +846,7 @@ impl<T: ScrollData> CachedScrollData<T> {
     ///
     pub async fn while_fetch_more(
         &mut self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Option<Vec<T::Item>>, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
@@ -870,7 +870,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         &mut self,
         limit: Option<usize>,
         offset: Option<u64>,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<T::Item>, StashError> {
         let items = self
             .end
@@ -895,18 +895,18 @@ impl<T: ScrollData> CachedScrollData<T> {
         Ok(items)
     }
 
-    pub async fn synced_count(&self, tether: &Tether<DefaultDb>) -> Result<u64, StashError> {
+    pub async fn synced_count(&self, tether: &Tether<UserDb>) -> Result<u64, StashError> {
         self.end.seen_count(tether).await
     }
 
-    pub async fn has_more(&self, tether: &Tether<DefaultDb>) -> Result<bool, StashError> {
+    pub async fn has_more(&self, tether: &Tether<UserDb>) -> Result<bool, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
 
         Ok(cursor_count < all)
     }
 
-    pub async fn has_next_page(&self, tether: &Tether<DefaultDb>) -> Result<bool, StashError> {
+    pub async fn has_next_page(&self, tether: &Tether<UserDb>) -> Result<bool, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
 
@@ -917,7 +917,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    pub async fn update(&mut self, tether: &Tether<DefaultDb>) -> Result<(), StashError> {
+    pub async fn update(&mut self, tether: &Tether<UserDb>) -> Result<(), StashError> {
         self.end = self.load_end_cursor(tether).await?.into();
 
         Ok(())
@@ -925,7 +925,7 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     pub async fn scroll_data_begin(
         &self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Option<T>, StashError> {
         let first = self
             .end
@@ -945,10 +945,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    pub async fn scroll_data_end(
-        &self,
-        tether: &Tether<DefaultDb>,
-    ) -> Result<Option<T>, StashError> {
+    pub async fn scroll_data_end(&self, tether: &Tether<UserDb>) -> Result<Option<T>, StashError> {
         let cursor_count = self.synced_count(tether).await?.saturating_sub(1);
 
         let last = self
@@ -969,7 +966,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
-    pub async fn load_end_cursor(&self, tether: &Tether<DefaultDb>) -> Result<T, StashError> {
+    pub async fn load_end_cursor(&self, tether: &Tether<UserDb>) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as
         // they should be the same however `end` var is just shorter.
@@ -1009,12 +1006,12 @@ pub struct SearchScrollData {
 }
 
 impl SearchScrollData {
-    pub async fn last(tether: &Tether<DefaultDb>) -> Result<Option<Self>, StashError> {
+    pub async fn last(tether: &Tether<UserDb>) -> Result<Option<Self>, StashError> {
         SearchScrollData::find_first("ORDER BY display_order DESC", vec![], tether).await
     }
 
     pub async fn last_remote_message_id_and_time(
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Option<(MessageId, UnixTimestamp)>, StashError> {
         let Some(last) = Self::last(tether).await? else {
             return Ok(None);
@@ -1031,13 +1028,13 @@ impl SearchScrollData {
 
     pub async fn remote_message(
         &self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Option<Message>, StashError> {
         let message = Message::find_by_id(self.local_message_id, tether).await?;
         Ok(message)
     }
 
-    pub async fn has_more(&self, tether: &Tether<DefaultDb>) -> Result<bool, StashError> {
+    pub async fn has_more(&self, tether: &Tether<UserDb>) -> Result<bool, StashError> {
         let last = Self::last(tether).await?;
 
         Ok(match last {
@@ -1049,7 +1046,7 @@ impl SearchScrollData {
     pub async fn fetch_more(
         &mut self,
         page_size: usize,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<Message>, StashError> {
         let last = Self::last(tether).await?;
 
@@ -1070,10 +1067,7 @@ impl SearchScrollData {
 
     /// Same as [`visible_elements`] but returns only the number of items that match.
     ///
-    pub async fn visible_element_count(
-        &self,
-        tether: &Tether<DefaultDb>,
-    ) -> Result<u64, StashError> {
+    pub async fn visible_element_count(&self, tether: &Tether<UserDb>) -> Result<u64, StashError> {
         let query = Self::query(None, None);
         Message::count(query, params![self.display_order], tether).await
     }
@@ -1090,7 +1084,7 @@ impl SearchScrollData {
     ///
     pub async fn visible_elements(
         &self,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<Message>, StashError> {
         self.visible_elements_limit(None, None, tether).await
     }
@@ -1101,7 +1095,7 @@ impl SearchScrollData {
         &self,
         limit: Option<usize>,
         offset: Option<u64>,
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<Message>, StashError> {
         let query = Self::query(limit, offset);
 
@@ -1170,7 +1164,7 @@ impl<T: ScrollData> ScrollQuery<T> {
         self
     }
 
-    pub async fn find(&self, tether: &Tether<DefaultDb>) -> Result<Vec<T::Item>, StashError> {
+    pub async fn find(&self, tether: &Tether<UserDb>) -> Result<Vec<T::Item>, StashError> {
         if MailBusyLabel::load(self.cursor.local_label_id, tether)
             .await?
             .is_some()
@@ -1199,7 +1193,7 @@ impl<T: ScrollData> ScrollQuery<T> {
         Ok(T::convert(self.cursor.local_label_id, items))
     }
 
-    pub async fn count(&self, tether: &Tether<DefaultDb>) -> Result<u64, StashError> {
+    pub async fn count(&self, tether: &Tether<UserDb>) -> Result<u64, StashError> {
         if MailBusyLabel::load(self.cursor.local_label_id, tether)
             .await?
             .is_some()

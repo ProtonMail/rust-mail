@@ -458,7 +458,7 @@ impl<'a> From<Option<&'a PathBuf>> for StashConfiguration<'a> {
 /// This is stash's database pool. Its main use is to create [`Tether`]s.
 // Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
-pub struct Stash<Db: DatabaseMarker = crate::marker::DefaultDb> {
+pub struct Stash<Db: DatabaseMarker = crate::marker::UserDb> {
     /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
     /// database for changes and notify subscribers. This is used to provide
     /// real-time updates to any subscribers that have registered interest in
@@ -662,7 +662,7 @@ impl WatcherHandle {
 /// inherited limitation of the [`rusqlite`] crate.
 /// `stash` works around it by using the actor pattern and wrapping each connection in a
 /// thread, using message passing for executing the queries and waiting for the result.
-pub struct Tether<Db: DatabaseMarker = crate::marker::DefaultDb> {
+pub struct Tether<Db: DatabaseMarker = crate::marker::UserDb> {
     connection: StashPooledConnection,
     watcher: Arc<Watcher>,
     tx_lock: Arc<Mutex<()>>,
@@ -1231,7 +1231,7 @@ struct BridgeClosure {
 /// there is only one transaction per tether.
 ///
 #[derive(Debug)]
-pub struct Bond<'tether, Db: DatabaseMarker = crate::marker::DefaultDb> {
+pub struct Bond<'tether, Db: DatabaseMarker = crate::marker::UserDb> {
     /// The associated [`Tether`] instance.
     tether: &'tether mut Tether<Db>,
 }
@@ -1371,7 +1371,7 @@ impl<Db: DatabaseMarker> RunTransaction<Db> for Tether<Db> {
 /// This trait should only be used in functions that have to create and commit several
 /// transactions.
 /// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
-pub trait RunTransaction<Db: DatabaseMarker = crate::marker::DefaultDb>: Sized {
+pub trait RunTransaction<Db: DatabaseMarker = crate::marker::UserDb>: Sized {
     /// Get the tether instance that powers the transaction for read only queries.
     fn tether(&self) -> &Tether<Db>;
 

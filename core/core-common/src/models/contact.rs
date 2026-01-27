@@ -41,7 +41,7 @@ use proton_crypto_account::keys::UnlockedUserKeys;
 use proton_sqlite3::rusqlite::Connection;
 use proton_vcard::vcard::{PropertyUid, VCard};
 use sqlite_watcher::watcher::TableObserver;
-use stash::DefaultDb;
+use stash::UserDb;
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{DbRecord, Model, ModelHooks};
@@ -107,10 +107,7 @@ impl Contact {
     /// This function retrieves the cards for a contact from the database,
     /// stores them in the contact struct, and then returns them.
     ///
-    pub async fn cards(
-        &mut self,
-        tether: &Tether<DefaultDb>,
-    ) -> Result<&[ContactCard], StashError> {
+    pub async fn cards(&mut self, tether: &Tether<UserDb>) -> Result<&[ContactCard], StashError> {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
@@ -324,7 +321,7 @@ impl Contact {
     pub async fn sync_with_card(
         local_id: LocalContactId,
         api: &Session,
-        tx: &mut impl RunTransaction<DefaultDb>,
+        tx: &mut impl RunTransaction<UserDb>,
     ) -> CoreContextResult<()> {
         // First let's check if the sync has already happened.
         let c: u32 = tx
@@ -346,7 +343,7 @@ impl Contact {
     pub async fn force_sync_with_card(
         local_id: LocalContactId,
         api: &Session,
-        tx: &mut impl RunTransaction<DefaultDb>,
+        tx: &mut impl RunTransaction<UserDb>,
     ) -> CoreContextResult<()> {
         info!("Syncing full contact for contact id {local_id}");
         let remote_id = Contact::local_id_counterpart(local_id, tx.tether())
@@ -380,7 +377,7 @@ impl Contact {
     pub async fn sync_contacts_by_ids(
         api: &Session,
         contact_ids: Vec<ContactId>,
-        tx: &mut impl RunTransaction<DefaultDb>,
+        tx: &mut impl RunTransaction<UserDb>,
     ) -> Result<Vec<Self>, ApiServiceError> {
         let batch_size = 10;
         let mut contacts: Vec<Self> = Vec::new();
@@ -410,9 +407,7 @@ impl Contact {
     /// Returns a list of contacts grouped by the first letter of their name.
     ///
     #[tracing::instrument(skip_all)]
-    pub async fn contact_list(
-        tether: &Tether<DefaultDb>,
-    ) -> Result<Vec<GroupedContacts>, StashError> {
+    pub async fn contact_list(tether: &Tether<UserDb>) -> Result<Vec<GroupedContacts>, StashError> {
         // TODO (ET-2028): Use pagination
         let (contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
@@ -591,7 +586,7 @@ impl Contact {
     }
 
     pub async fn without_emails(
-        tether: &Tether<DefaultDb>,
+        tether: &Tether<UserDb>,
     ) -> Result<Vec<LocalContactId>, StashError> {
         tether.query_values::<_,LocalContactId>(indoc!{
             "SELECT contacts.local_id FROM contacts WHERE contacts.remote_id NOT IN (SELECT DISTINCT remote_contact_id FROM contact_emails)"
