@@ -9,7 +9,7 @@ use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
 #[allow(clippy::ptr_arg)]
 pub fn parse_stylesheet(
     css: &mut String,
-) -> Result<StyleSheet, LightningError<lightningcss::error::ParserError>> {
+) -> Result<StyleSheet<'_, '_>, LightningError<lightningcss::error::ParserError<'_>>> {
     StyleSheet::parse(
         css,
         ParserOptions {
@@ -23,7 +23,7 @@ pub fn parse_stylesheet(
 #[allow(clippy::ptr_arg)]
 pub fn parse_style_attribute(
     css: &mut String,
-) -> Result<StyleAttribute, LightningError<lightningcss::error::ParserError>> {
+) -> Result<StyleAttribute<'_>, LightningError<lightningcss::error::ParserError<'_>>> {
     StyleAttribute::parse(
         css,
         ParserOptions {

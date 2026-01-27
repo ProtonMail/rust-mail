@@ -781,10 +781,10 @@ impl Context {
 
         if let Some(user_ctx) = user_ctx_opt {
             tracing::info!("Clear all user data from database");
-            if let Ok(tether) = user_ctx.stash().connection().await {
-                if let Err(e) = nuke::drop_database_tables(tether).await {
-                    tracing::error!("Could not clean user database, details: `{e}`");
-                }
+            if let Ok(tether) = user_ctx.stash().connection().await
+                && let Err(e) = nuke::drop_database_tables(tether).await
+            {
+                tracing::error!("Could not clean user database, details: `{e}`");
             }
         } else {
             tracing::warn!(

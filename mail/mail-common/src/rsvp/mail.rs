@@ -98,6 +98,7 @@ where
 
                 msg.save(tx).await.context("Couldn't save message")?;
                 body.save(tx).await.context("Couldn't save message body")?;
+                ics.save(tx).await.context("Couldn't save ics attachment")?;
 
                 Ok(())
             })

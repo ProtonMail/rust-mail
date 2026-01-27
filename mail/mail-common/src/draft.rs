@@ -38,7 +38,7 @@ use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 pub mod attachments;
 pub mod compose;

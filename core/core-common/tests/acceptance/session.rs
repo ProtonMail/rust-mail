@@ -229,21 +229,21 @@ async fn test_manual_logout_with_session_observer_double_cleanup() {
             pool_size: Some(1),
             ..Default::default()
         });
-        if let Ok(stash) = user_stash {
-            if let Ok(tether) = stash.connection().await {
-                let tables = tether
+        if let Ok(stash) = user_stash
+            && let Ok(tether) = stash.connection().await
+        {
+            let tables = tether
                     .query_values::<_, String>(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
                         vec![],
                     )
                     .await
                     .unwrap_or_default();
-                assert_eq!(
-                    tables.len(),
-                    0,
-                    "All tables should be dropped even when sessions are deleted first"
-                );
-            }
+            assert_eq!(
+                tables.len(),
+                0,
+                "All tables should be dropped even when sessions are deleted first"
+            );
         }
     }
 

@@ -826,7 +826,7 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
         .unwrap()
         .unwrap();
 
-    let mut conversations = vec![
+    let mut conversations = [
         conversation!(remote_id: conv_id!("conv_1"), display_order: 1, is_known: false),
         conversation!(remote_id: conv_id!("conv_2"), display_order: 2, is_known: true),
         conversation!(remote_id: conv_id!("conv_3"), display_order: 3, has_messages: false, num_messages: 1),
@@ -986,7 +986,7 @@ async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() 
     );
 
     // Step 5: Simulate the save_conversations filter that happens next
-    let conversations = vec![api_conversation.clone()];
+    let conversations = [api_conversation.clone()];
     let filtered_conversations: Vec<_> = conversations
         .iter()
         .filter_map(|conv| {

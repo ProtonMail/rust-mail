@@ -74,7 +74,7 @@ impl MailTestContext {
     }
 
     #[function_name::named]
-    pub fn mock_get_messages(&self) -> GetMessagesMock {
+    pub fn mock_get_messages(&self) -> GetMessagesMock<'_> {
         GetMessagesMock::new(self, function_name!())
     }
 

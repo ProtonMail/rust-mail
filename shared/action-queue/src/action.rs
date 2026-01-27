@@ -22,7 +22,6 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use tracing::error;
 
 /// While actions can return any error type, for better user experience it makes
 /// sense to distinguish "fatal errors" from "retryable errors" - this is what

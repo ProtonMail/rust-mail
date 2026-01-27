@@ -54,7 +54,6 @@ use std::sync::{Arc, OnceLock, Weak};
 use tokio::runtime;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
-use tracing::error;
 
 pub const MAIL_ALLOWED_FREE_USER_COUNT: u64 = 2;
 

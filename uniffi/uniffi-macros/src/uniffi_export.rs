@@ -148,7 +148,7 @@ impl VisitMut for Visitor<'_> {
 
         if let Some((out, blk)) = self.on_visit_fn(this.as_ref(), rtyp.as_ref(), data) {
             i.sig.output = out;
-            i.block = Box::new(blk);
+            *i.block = blk;
         }
     }
 

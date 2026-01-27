@@ -570,14 +570,14 @@ impl RemoteConversationScrollerSource {
                     use stash::orm::Model;
 
                     // Skip conversations that have been deleted
-                    if let Some(remote_id) = &conversation.remote_id {
-                        if deleted_ids.contains(&remote_id.to_string()) {
-                            tracing::debug!(
-                                "Skipping scrolled conversation {} - already deleted",
-                                remote_id
-                            );
-                            continue;
-                        }
+                    if let Some(remote_id) = &conversation.remote_id
+                        && deleted_ids.contains(&remote_id.to_string())
+                    {
+                        tracing::debug!(
+                            "Skipping scrolled conversation {} - already deleted",
+                            remote_id
+                        );
+                        continue;
                     }
 
                     // since we now fetch the messages, this should be set to true.
