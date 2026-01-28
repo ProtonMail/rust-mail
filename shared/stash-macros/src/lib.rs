@@ -142,10 +142,12 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// use stash::macros::Model;
 /// use stash::orm::Model;
 /// use stash::stash::Stash;
+/// use stash::UserDb;
 /// use uuid::Uuid;
 ///
 /// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
 /// #[TableName("foo_table")]
+/// #[Database(UserDb)]
 /// struct Foo {
 ///     #[IdField]
 ///     id: Uuid,
@@ -165,10 +167,12 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// use stash::macros::Model;
 /// use stash::orm::Model;
 /// use stash::stash::Stash;
+/// use stash::UserDb;
 /// use uuid::Uuid;
 ///
 /// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
 /// #[TableName("foo_table")]
+/// #[Database(UserDb)]
 /// struct Foo {
 ///     #[IdField(optional)]
 ///     id: Option<Uuid>,
@@ -188,10 +192,12 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// use stash::macros::Model;
 /// use stash::orm::Model;
 /// use stash::stash::Stash;
+/// use stash::UserDb;
 /// use uuid::Uuid;
 ///
 /// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
 /// #[TableName("foo_table")]
+/// #[Database(UserDb)]
 /// struct Foo {
 ///     #[IdField(autoincrement)]
 ///     id: Option<u64>,
@@ -260,7 +266,7 @@ RETURNING {id_field}
 
         let update_query = format!(
             "
-UPDATE {table} 
+UPDATE {table}
 SET {update_fields}
 WHERE {id_field} = ?
 ",
@@ -525,7 +531,7 @@ fn extract_database_marker(input: &DeriveInput) -> TokenStream2 {
                 None
             }
         })
-        .unwrap_or_else(|| quote! { ::stash::marker::DefaultDb })
+        .expect("Database attribute is missing")
 }
 
 /// Extract attributes with a `via` argument from the struct fields.

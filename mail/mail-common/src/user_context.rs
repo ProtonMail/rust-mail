@@ -61,6 +61,7 @@ use proton_event_loop::EventLoopError;
 use proton_event_loop::v6::{EventSubscriber, EventSubscriberId};
 use proton_issue_reporter_service::{IssueLevel, issue_report_keys_from_error};
 use proton_task_service::Spawner;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::any::{Any, TypeId};
@@ -518,7 +519,7 @@ impl MailUserContext {
     }
 
     #[must_use]
-    pub fn user_stash(&self) -> &Stash {
+    pub fn user_stash(&self) -> &Stash<UserDb> {
         self.user_context.stash()
     }
 

@@ -31,10 +31,10 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
-use stash::exports::*;
 use stash::macros::{DbRecord, Model};
 use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::{UserDb, exports::*};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
@@ -71,6 +71,7 @@ impl ToSql for MetadataId {
 /// can be kept up to date with ongoing changes.
 #[derive(Clone, Debug, Eq, Model, PartialEq, TypedBuilder)]
 #[TableName("draft_metadata")]
+#[Database(UserDb)]
 pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[IdField(autoincrement)]
@@ -371,6 +372,7 @@ impl DraftMetadata {
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[ModelHooks]
 #[TableName("draft_send_result")]
+#[Database(UserDb)]
 pub struct DraftSendResult {
     #[IdField]
     pub local_message_id: LocalMessageId,
@@ -485,7 +487,7 @@ impl DraftSendResult {
     }
 
     /// Subscribe to changes made to this database table.
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
             .await
@@ -950,6 +952,7 @@ impl TableObserver for DraftSendResultTableObserver {
 /// state.
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[TableName("draft_attachment_metadata")]
+#[Database(UserDb)]
 pub struct DraftAttachmentMetadata {
     #[IdField]
     pub local_attachment_id: LocalAttachmentId,
@@ -1148,7 +1151,7 @@ impl DraftAttachmentMetadata {
     }
 
     /// Subscribe to changes made to this database table.
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
             .await

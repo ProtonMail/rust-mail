@@ -1,5 +1,5 @@
-use stash::params;
 use stash::stash::{Bond, StashError};
+use stash::{UserDb, params};
 
 use proton_sqlite3::Migration;
 
@@ -8,7 +8,7 @@ use super::v001_proton_mail_default_labels::default_labels;
 pub struct MessageCountersMigration;
 
 #[async_trait::async_trait]
-impl Migration for MessageCountersMigration {
+impl Migration<UserDb> for MessageCountersMigration {
     fn name(&self) -> &str {
         "v007_proton_mail_message_counters"
     }

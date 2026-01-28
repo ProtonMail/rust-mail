@@ -9,6 +9,7 @@ use parking_lot::RwLock;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Stash, Tether, WatcherHandle};
 use std::sync::Arc;
@@ -124,7 +125,10 @@ impl Mailbox {
     /// Subscribe for updates to the number of unread items in this mailbox.
     /// Depending on the view mode it either watches conversations or messages.
     ///
-    pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
+    pub async fn watch_unread_count(
+        &self,
+        stash: &Stash<UserDb>,
+    ) -> MailContextResult<WatcherHandle> {
         let watcher = match self.view_mode() {
             ViewMode::Conversations => ConversationCounter::watch(stash).await?,
             ViewMode::Messages => MessageCounter::watch(stash).await?,

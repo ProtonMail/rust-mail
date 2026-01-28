@@ -58,12 +58,12 @@ async fn query_tx(tx: &Bond<'_>, value: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod concurrency_basic_sync {
-    use stash::stash::Stash;
+    use stash::{UserDb, stash::Stash};
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let conn = stash.connection().await.unwrap();
 
@@ -90,7 +90,7 @@ mod concurrency_basic_sync {
     #[tokio::test]
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let mut conn = stash.connection().await.unwrap();
         let result = conn
@@ -122,7 +122,7 @@ mod concurrency_basic_sync {
     #[tokio::test(flavor = "multi_thread")]
     async fn basic_query_with_transaction_closure_spawnd() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let result = tokio::spawn(async move {
             let mut conn = stash.connection().await.unwrap();
@@ -158,12 +158,12 @@ mod concurrency_basic_sync {
 #[cfg(test)]
 mod concurrency_async_functions {
     use super::*;
-    use stash::stash::StashError;
+    use stash::{UserDb, stash::StashError};
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let conn = stash.connection().await.unwrap();
 
@@ -178,7 +178,7 @@ mod concurrency_async_functions {
     #[tokio::test]
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let mut conn = stash.connection().await.unwrap();
 
@@ -199,12 +199,12 @@ mod concurrency_async_functions {
 #[cfg(test)]
 mod concurrency_async_threads {
     use super::*;
-    use stash::stash::StashError;
+    use stash::{UserDb, stash::StashError};
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let conn = stash.connection().await.unwrap();
 
@@ -223,7 +223,7 @@ mod concurrency_async_threads {
     #[tokio::test]
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
 
         let result = async_spawn(async move {
@@ -246,7 +246,7 @@ mod concurrency_async_threads {
     #[tokio::test]
     async fn basic_query_with_two_simultaneous_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let stash1 = stash.clone();
         let stash2 = stash.clone();
@@ -301,13 +301,13 @@ mod concurrency_async_threads {
 #[cfg(test)]
 mod concurrency_std_threads {
     use super::*;
-    use stash::stash::StashError;
+    use stash::{UserDb, stash::StashError};
     use tokio::runtime::Runtime;
 
     #[tokio::test]
     async fn basic_query_with_two_simultaneous_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let stash1 = stash.clone();
         let stash2 = stash.clone();
@@ -368,13 +368,13 @@ mod concurrency_std_threads {
 #[cfg(test)]
 mod concurrency_mixed {
     use super::*;
-    use stash::stash::StashError;
+    use stash::{UserDb, stash::StashError};
     use tokio::runtime::Runtime;
 
     #[tokio::test]
     async fn basic_query_with_multiple_mixed_simultaneous_approaches() {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let conn = stash.connection().await.unwrap();
         let stash1 = stash.clone();
@@ -524,6 +524,7 @@ mod orm_tests {
     use crate::params;
     use rusqlite::{Connection, Transaction};
     use stash::{
+        UserDb,
         orm::{Model, ModelHooks},
         stash::{Stash, StashError},
         utils::ConnectionExt,
@@ -533,6 +534,7 @@ mod orm_tests {
     #[derive(Clone, Debug, Eq, Model, PartialEq)]
     #[TableName("my_model")]
     #[ModelHooks]
+    #[Database(UserDb)]
     struct MyModel {
         #[IdField(autoincrement)]
         id: Option<u64>,
@@ -651,12 +653,14 @@ mod orm_tests {
 }
 
 mod interrupt {
+    use stash::UserDb;
+
     use super::*;
 
     #[tokio::test]
     async fn transactions_are_interrupted() -> anyhow::Result<()> {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let mut conn = stash.connection().await?;
         let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
@@ -684,7 +688,7 @@ mod interrupt {
     #[tokio::test]
     async fn new_transactions_wait_until_resume() -> anyhow::Result<()> {
         let db_dir = tempfile::tempdir().unwrap();
-        let stash: Stash =
+        let stash: Stash<UserDb> =
             Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         stash.interrupt();
         let mut conn = stash.connection().await?;

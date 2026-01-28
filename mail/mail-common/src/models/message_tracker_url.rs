@@ -1,11 +1,12 @@
 use crate::datatypes::LocalMessageId;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use stash::{UserDb, params};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Model)]
 #[TableName("message_tracker_urls")]
+#[Database(UserDb)]
 pub struct MessageTrackerUrl {
     #[IdField(autoincrement)]
     pub id: Option<i64>,

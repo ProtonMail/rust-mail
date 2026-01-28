@@ -9,6 +9,7 @@ use proton_mail_api::services::proton::prelude::{AttachmentMetadata, Disposition
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::db::offline_migrations::run as migrate_mail_db;
 use proton_mail_common::models::Message;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashConfiguration, StashError};
 use std::string::ToString;
@@ -83,7 +84,7 @@ pub fn current_benchmark(c: &mut Criterion) {
     });
 }
 
-async fn setup_db(stash: &Stash) -> (LabelId, AddressId) {
+async fn setup_db(stash: &Stash<UserDb>) -> (LabelId, AddressId) {
     migrate_core_db(stash).await.unwrap();
     migrate_mail_db(stash).await.unwrap();
 
@@ -151,7 +152,7 @@ async fn create_messages(
     }
 }
 
-async fn setup_and_create_messages(stash: &Stash, message_count: usize) {
+async fn setup_and_create_messages(stash: &Stash<UserDb>, message_count: usize) {
     let (label_id, address_id) = setup_db(stash).await;
     let mut tether = stash.connection().await.unwrap();
     tether

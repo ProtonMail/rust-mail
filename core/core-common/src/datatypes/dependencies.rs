@@ -8,8 +8,11 @@ use proton_core_api::{
     services::proton::{ContactEmail as ApiContactEmail, ContactId},
     session::Session,
 };
-use stash::stash::{RunTransaction, Tether};
-use stash::{DefaultDb, orm::Model, params};
+use stash::{
+    UserDb,
+    stash::{RunTransaction, Tether},
+};
+use stash::{orm::Model, params};
 
 #[derive(Default)]
 pub struct ContactsDependencyFetcher {
@@ -27,7 +30,7 @@ impl ContactsDependencyFetcher {
     pub async fn fetch_and_store(
         &self,
         api: &Session,
-        tx: &mut (impl RunTransaction<DefaultDb> + Send),
+        tx: &mut (impl RunTransaction<UserDb> + Send),
     ) -> Result<(), CoreContextError> {
         if !self.contact_ids.is_empty() {
             Contact::sync_contacts_by_ids(api, self.contact_ids.iter().cloned().collect(), tx)

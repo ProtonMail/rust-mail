@@ -16,14 +16,14 @@
 
 use include_dir::{Dir, include_dir};
 use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
-use stash::stash::Stash;
+use stash::{UserDb, stash::Stash};
 
 /// Run search-related database migrations
 ///
 /// This function is called internally by `MailSearchService::new()`.
 /// Applications should not call this directly - it's automatically handled
 /// during service initialization.
-pub(crate) async fn run(stash: &Stash) -> Result<usize, MigratorError> {
+pub(crate) async fn run(stash: &Stash<UserDb>) -> Result<usize, MigratorError> {
     const TABLE: &str = "proton_mail_search_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/migrations");
 

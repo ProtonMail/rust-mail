@@ -2,6 +2,7 @@ use crate::datatypes::LocalContactId;
 use proton_core_api::services::proton::ContactCard as ApiContactCard;
 use proton_core_api::services::proton::ContactId;
 use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
+use stash::UserDb;
 use stash::macros::Model;
 
 /// Represents a contact card.
@@ -11,6 +12,7 @@ use stash::macros::Model;
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_cards")]
+#[Database(UserDb)]
 pub struct ContactCard {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactId>,

@@ -19,6 +19,7 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::exports::{Connection, Transaction};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
@@ -43,6 +44,7 @@ impl ModelHooks for MailSettings {
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("mail_settings")]
+#[Database(UserDb)]
 #[ModelHooks]
 pub struct MailSettings {
     #[IdField]
@@ -189,7 +191,7 @@ impl MailSettings {
     pub async fn initialize<PM: ProtonMail>(
         watcher: Arc<InitializationWatcher>,
         api: &PM,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<MailContextError>> {
         InitializedComponent::initialize(
             watcher,
@@ -301,7 +303,7 @@ impl MailSettings {
         Ok(())
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
             .await

@@ -14,6 +14,7 @@ use proton_core_common::models::{
     ModelIdExtension,
 };
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::exports::Row;
 use stash::orm::{ConversionError, DbRecord};
 use stash::stash::{Stash, WatcherHandle};
@@ -46,7 +47,7 @@ impl LabelWithCounters {
     pub async fn initialize<API>(
         watcher: Arc<InitializationWatcher>,
         api: &API,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<LabelError>>
     where
         API: ProtonCore,
@@ -192,7 +193,7 @@ impl LabelWithCounters {
         Ok(values)
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
             .await

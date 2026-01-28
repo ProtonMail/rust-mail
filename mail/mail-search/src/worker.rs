@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_html_transformer::{Html2TextOptions, Transformer, sanitizer::StripStyleSheets};
+use stash::UserDb;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
@@ -57,7 +58,7 @@ const BATCH_SIZE: usize = 5;
 ///
 /// Generic over `P` to allow different `MessageDataProvider` implementations.
 pub struct SearchIndexWorker<P: MessageDataProvider> {
-    stash: Stash,
+    stash: Stash<UserDb>,
     search_service: MailSearchService,
     data_provider: Arc<P>,
     /// Watcher handle for receiving notifications when `search_index_intents` table changes
@@ -86,7 +87,7 @@ enum PrepareIndexResult {
 impl<P: MessageDataProvider> SearchIndexWorker<P> {
     /// Create a new search index worker
     pub fn new(
-        stash: Stash,
+        stash: Stash<UserDb>,
         search_service: MailSearchService,
         data_provider: Arc<P>,
         watcher_handle: WatcherHandle,

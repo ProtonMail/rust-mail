@@ -13,6 +13,7 @@ use proton_mail_common::MailUserContext;
 use proton_mail_common::Mailbox as RealMailbox;
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::datatypes::SystemLabelId;
+use stash::UserDb;
 use stash::stash::Stash;
 use std::sync::Arc;
 use uniffi_runtime::async_runtime;
@@ -32,7 +33,7 @@ impl Mailbox {
         self.ctx.clone()
     }
 
-    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+    pub(crate) fn user_stash(&self) -> Result<Stash<UserDb>, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 }
@@ -154,7 +155,7 @@ impl Mailbox {
         Ok(self.ctx()?.session().to_owned())
     }
 
-    pub fn stash(&self) -> Result<Stash, ProtonError> {
+    pub fn stash(&self) -> Result<Stash<UserDb>, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 }

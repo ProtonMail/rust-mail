@@ -1,6 +1,6 @@
 use proton_sqlite3::Migration;
 use stash::{
-    params,
+    UserDb, params,
     stash::{Bond, StashError},
 };
 
@@ -73,7 +73,7 @@ impl AndroidSignaturesMigration {
 }
 
 #[async_trait::async_trait]
-impl Migration for AndroidSignaturesMigration {
+impl Migration<UserDb> for AndroidSignaturesMigration {
     fn name(&self) -> &str {
         "v046_proton_mail_android_signatures"
     }

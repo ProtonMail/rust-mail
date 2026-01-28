@@ -4,8 +4,8 @@ use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::services::SessionObserverService;
 use proton_core_common::test_utils::test_context::TestContext;
-use stash::AccountDb;
 use stash::stash::{Bond, StashError};
+use stash::{AccountDb, UserDb};
 use std::time::Duration;
 
 #[tokio::test]
@@ -225,7 +225,7 @@ async fn test_manual_logout_with_session_observer_double_cleanup() {
         // If database file still exists and isn't archived, verify tables are dropped
         // Try to open a connection to the user database directly
         use stash::stash::{Stash, StashConfiguration};
-        let user_stash: Result<Stash, _> = Stash::new(StashConfiguration {
+        let user_stash: Result<Stash<UserDb>, _> = Stash::new(StashConfiguration {
             path: Some(&user_db_path),
             pool_size: Some(1),
             ..Default::default()

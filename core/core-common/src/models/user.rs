@@ -14,6 +14,7 @@ use proton_core_api::services::proton::{
 };
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
+use stash::UserDb;
 use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Transaction, Value};
 use stash::macros::Model;
 use stash::orm::Model;
@@ -24,6 +25,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, Us
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("users")]
+#[Database(UserDb)]
 pub struct User {
     #[IdField(optional)]
     pub remote_id: Option<UserId>,
@@ -142,7 +144,7 @@ impl User {
     pub async fn initialize_with_settings<API>(
         watcher: Arc<InitializationWatcher>,
         api: &API,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<CoreContextError>>
     where
         API: ProtonCore,

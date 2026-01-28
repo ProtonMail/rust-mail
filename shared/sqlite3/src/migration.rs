@@ -8,14 +8,14 @@ pub mod file;
 use futures::executor::block_on;
 use itertools::Itertools;
 use stash::exports::SqliteError;
-use stash::marker::{DatabaseMarker, DefaultDb};
+use stash::marker::DatabaseMarker;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use thiserror::Error;
 use tracing::{Instrument, debug};
 
 #[async_trait::async_trait]
-pub trait Migration<Db: DatabaseMarker = DefaultDb>: Send + Sync {
+pub trait Migration<Db: DatabaseMarker>: Send + Sync {
     fn name(&self) -> &str;
 
     fn order_number(&self) -> &str {
@@ -46,7 +46,7 @@ pub enum MigratorError {
     Stash(#[from] StashError),
 }
 
-pub struct Migrator<Db: DatabaseMarker = DefaultDb> {
+pub struct Migrator<Db: DatabaseMarker> {
     table: String,
     migrations: Vec<Box<dyn Migration<Db>>>,
 }

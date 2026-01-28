@@ -11,15 +11,16 @@ use proton_core_api::services::proton::{Address as ApiAddress, AddressId, Proton
 use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::{DbRecord, Model, ModelHooks};
-use stash::params;
 use stash::rusqlite::params_from_iter;
 use stash::stash::{Bond, Stash, StashError, StashResult, Tether};
+use stash::{UserDb, params};
 use std::sync::Arc;
 use tracing::{error, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
 #[ModelHooks]
+#[Database(UserDb)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
     #[IdField(autoincrement)]
@@ -104,7 +105,7 @@ impl Address {
     pub async fn initialize<API>(
         watcher: Arc<InitializationWatcher>,
         api: &API,
-        stash: &Stash,
+        stash: &Stash<UserDb>,
     ) -> Result<(), InitializationError<CoreContextError>>
     where
         API: ProtonCore,

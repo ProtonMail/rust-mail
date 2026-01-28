@@ -28,6 +28,7 @@ use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
+use stash::UserDb;
 use stash::stash::{Stash, WatcherHandle};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -57,7 +58,7 @@ impl MailUserSession {
         Ok(self.ctx.consume().ok_or(UnexpectedError::Internal)?)
     }
 
-    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+    pub(crate) fn user_stash(&self) -> Result<Stash<UserDb>, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 }

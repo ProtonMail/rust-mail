@@ -16,6 +16,7 @@ use proton_core_api::session::Session;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use services::{PaymentsService, UserFeatureFlagsService};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
@@ -47,7 +48,7 @@ pub mod services;
 
 #[async_trait::async_trait]
 pub trait UserDatabaseInitializer: Send + Sync {
-    async fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
+    async fn initialize(&self, stash: &Stash<UserDb>) -> Result<(), MigratorError>;
 
     fn boxed(self) -> Box<dyn UserDatabaseInitializer>
     where
@@ -67,7 +68,7 @@ pub struct UserContext {
     cache_path: PathBuf,
     // Essential services
     session: Session,
-    user_stash: Stash,
+    user_stash: Stash<UserDb>,
     queue: Queue,
     key_manager: Arc<CryptoKeyManager>,
     cancellation_token: CancellationToken,
@@ -245,7 +246,7 @@ impl UserContext {
     }
 
     #[must_use]
-    pub fn stash(&self) -> &Stash {
+    pub fn stash(&self) -> &Stash<UserDb> {
         &self.user_stash
     }
 
@@ -312,7 +313,7 @@ impl UserContext {
         path: &Path,
         inits: &[Box<dyn UserDatabaseInitializer>],
         origin: Origin,
-    ) -> Result<Stash, MigratorError> {
+    ) -> Result<Stash<UserDb>, MigratorError> {
         let path = path.to_owned();
 
         let stash = task::spawn_blocking(move || {

@@ -25,7 +25,7 @@ pub mod utils;
 pub mod watcher;
 
 #[allow(deprecated)]
-pub use marker::{AccountDb, DefaultDb, UserDb};
+pub use marker::{AccountDb, UserDb};
 
 /// Re-exported proc macros.
 ///

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::Stash;
@@ -10,6 +11,7 @@ use tokio::spawn as spawn_async;
 
 #[derive(Clone, Debug, Deserialize, Model, PartialEq, Serialize)]
 #[TableName("foo")]
+#[Database(UserDb)]
 pub struct Foo {
     #[IdField]
     pub id: u64,
@@ -34,7 +36,7 @@ impl TableObserver for FooWatcher {
 async fn test_tracker() {
     let dir = tempfile::TempDir::new().expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
-    let stash: Stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
+    let stash: Stash<UserDb> = Stash::new(Some(&db_path)).expect("Failed to create Stash");
     let conn = stash.connection().await.unwrap();
 
     conn.execute(

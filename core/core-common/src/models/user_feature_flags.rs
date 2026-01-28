@@ -1,4 +1,5 @@
 use stash::{
+    UserDb,
     macros::Model,
     orm::Model,
     params,
@@ -10,6 +11,7 @@ use crate::datatypes::{FlagMutability, UnixTimestamp, UserFeatureFlagSource};
 
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("user_feature_flags")]
+#[Database(UserDb)]
 pub struct UserFeatureFlag {
     #[IdField]
     pub name: String,

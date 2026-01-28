@@ -7,7 +7,7 @@ use proton_core_api::services::proton::AddressId;
 use proton_sqlite3::Migration;
 use stash::macros::DbRecord;
 use stash::stash::{Bond, StashError};
-use stash::{params, sql_using_serde};
+use stash::{UserDb, params, sql_using_serde};
 
 pub struct DraftSendResultMigration;
 
@@ -79,7 +79,7 @@ struct V1Value {
 }
 
 #[async_trait::async_trait]
-impl Migration for DraftSendResultMigration {
+impl Migration<UserDb> for DraftSendResultMigration {
     fn name(&self) -> &str {
         "v019_proton_mail_draft_send_result_refactor"
     }

@@ -4,6 +4,7 @@ use crate::actions::register_actions;
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
+use stash::UserDb;
 use stash::stash::Stash;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -63,7 +64,7 @@ impl UserContextBuilder {
         self,
         session: Session,
         context: Arc<Context>,
-        user_stash: Stash,
+        user_stash: Stash<UserDb>,
         queue: Queue,
         user_id: UserId,
         session_id: SessionId,

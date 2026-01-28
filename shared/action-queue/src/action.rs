@@ -311,7 +311,7 @@ pub type LocalOutput<T: Action> = Result<QueuedActionOutput<T>, ActionError<T>>;
 ///
 /// Database read queries can be made over this type as it implements `Deref<Target=Tether>`.
 /// For writes use the [`transaction()`] method.
-pub struct WriterGuard<'t, Db: stash::marker::DatabaseMarker = stash::marker::DefaultDb> {
+pub struct WriterGuard<'t, Db: stash::marker::DatabaseMarker = stash::marker::UserDb> {
     tether: &'t mut Tether<Db>,
     execution_guard: &'t ExecutionGuard,
 }

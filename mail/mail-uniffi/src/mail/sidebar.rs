@@ -11,6 +11,7 @@ use proton_core_common::utils::MapVec as _;
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;
 use proton_mail_common::{MailUserContext, Sidebar as RealSidebar};
+use stash::UserDb;
 use stash::stash::Stash;
 use std::sync::Arc;
 
@@ -24,7 +25,7 @@ impl Sidebar {
         Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
     }
 
-    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+    pub(crate) fn user_stash(&self) -> Result<Stash<UserDb>, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
 }

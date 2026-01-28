@@ -34,6 +34,7 @@ use proton_core_common::utils::MapVec as _;
 use proton_sqlite3::rusqlite::Transaction;
 use proton_sqlite3::rusqlite::params_from_iter;
 use sqlite_watcher::watcher::TableObserver;
+use stash::UserDb;
 use stash::exports::Connection;
 use stash::orm::DbRecord;
 use stash::rusqlite::OptionalExtension;
@@ -92,6 +93,7 @@ use tracing::{debug, error, info, trace, warn};
 #[derive(Clone, Debug, Eq, Model, PartialEq, ScrollerEq)]
 #[TableName("messages")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct Message {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalMessageId>,
@@ -917,7 +919,7 @@ impl Message {
         Ok(res)
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MessageWatcher { sender }))
             .await
@@ -2539,6 +2541,7 @@ impl AttachmentData {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_labels")]
+#[Database(UserDb)]
 pub struct MessageLabel {
     #[IdField]
     pub local_label_id: LocalLabelId,
@@ -2617,6 +2620,7 @@ impl Message {
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct MessageBodyMetadata {
     #[IdField(optional)]
     pub local_message_id: Option<LocalMessageId>,
@@ -2874,6 +2878,7 @@ impl MessageLabelStats {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_counters")]
+#[Database(UserDb)]
 pub struct MessageCounter {
     #[IdField]
     pub local_label_id: LocalLabelId,
@@ -2906,7 +2911,7 @@ impl MessageCounter {
         }
     }
 
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
             .await

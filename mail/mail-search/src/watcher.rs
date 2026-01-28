@@ -5,7 +5,10 @@
 //! issue and the race condition (watcher only fires after transaction commits).
 
 use sqlite_watcher::watcher::TableObserver;
-use stash::stash::{Stash, StashError, WatcherHandle};
+use stash::{
+    UserDb,
+    stash::{Stash, StashError, WatcherHandle},
+};
 use std::collections::BTreeSet;
 
 /// Table name for search index intents
@@ -20,7 +23,7 @@ impl SearchIndexIntentWatcher {
     /// Returns a `WatcherHandle` that can be used to receive notifications
     /// when the table changes. The watcher automatically detects which
     /// Stash instance (account) the change belongs to.
-    pub async fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+    pub async fn watch(stash: &Stash<UserDb>) -> Result<WatcherHandle, StashError> {
         stash
             .subscribe_to(|sender| Box::new(SearchIndexIntentTableWatcher { sender }))
             .await
