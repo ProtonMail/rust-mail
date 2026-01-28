@@ -177,6 +177,8 @@ pub enum DraftSendErrorReason {
     ExpirationTimeTooSoon,
     /// Message + Attachments size exceeds limit
     MessageTooLarge,
+    /// Invalid Server Request
+    BadRequest(String),
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.

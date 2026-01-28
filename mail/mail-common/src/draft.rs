@@ -152,6 +152,8 @@ pub enum SendError {
     ExpirationTimeTooSoon,
     #[error("Combined Message and Attachment size too large")]
     MessageTooLarge,
+    #[error("{0}")]
+    BadRequest(String),
 }
 
 impl From<SendError> for MailContextError {
