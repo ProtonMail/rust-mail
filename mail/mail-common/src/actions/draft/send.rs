@@ -22,6 +22,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::consts::Mail;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::PrivateEmail;
 use proton_core_api::services::proton::prelude::AddressId;
 use proton_core_common::datatypes::UnixTimestamp;
@@ -549,42 +550,52 @@ impl Send {
                 response.delivery_time
             }
             Err(err) => {
-                let Some(proton_error) = err.to_proton_error() else {
-                    error!("Failed to send send email request: {err:?}");
-                    return Err(err.into());
-                };
-                if proton_error.code == Mail::MessageAlreadySent as u32 {
-                    info!("Message already sent on server");
-                    // When the message is already sent, we just need to delete the
-                    // metadata. The event loop will take care of the rest.
-                    guard
-                        .tx::<_, _, <Self as Action>::Error>(async |tx| {
-                            Ok(on_already_sent(
-                                action.metadata_id,
-                                Some(remote_message_id.clone()),
-                                tx,
-                            )
-                            .await?)
-                        })
-                        .await?;
-                    // We have no delivery time here, so we just return 0 to "cancel"
-                    // all the checks that depend on this time in the future.
-                    0
-                } else if proton_error.code == Mail::ExpirationTimeTooSoon as u32 {
-                    return Err(SendError::ExpirationTimeTooSoon.into());
-                } else if proton_error.code == Mail::MessageDoesNotExist as u32 {
-                    return Err(SendError::DraftDoesNotExistOnServer.into());
-                } else if proton_error.code == Mail::TooManyAttachments as u32 {
-                    // Size of body + attachments > 25 mb - shares the same error
-                    // code but is return as `Message to large`
-                    // This can happen when we inherit attachment from a forwarded message
-                    // (e.g: 3x 16 mb attachments) or the body + attachment
-                    // size exceed this limit. In the former, the error is never reported
-                    // from backend on draft save, so we only see this during send.
-                    return Err(SendError::MessageTooLarge.into());
-                } else {
-                    error!("Failed to send send email request: {err:?}");
-                    return Err(err.into());
+                match err {
+                    ApiServiceError::BadRequest(_, Some(proton_error)) => {
+                        return Err(SendError::BadRequest(
+                            proton_error.error.unwrap_or("Unknown Error".to_owned()),
+                        )
+                        .into());
+                    }
+                    err => {
+                        let Some(proton_error) = err.to_proton_error() else {
+                            error!("Failed to send send email request: {err:?}");
+                            return Err(err.into());
+                        };
+                        if proton_error.code == Mail::MessageAlreadySent as u32 {
+                            info!("Message already sent on server");
+                            // When the message is already sent, we just need to delete the
+                            // metadata. The event loop will take care of the rest.
+                            guard
+                                .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                                    Ok(on_already_sent(
+                                        action.metadata_id,
+                                        Some(remote_message_id.clone()),
+                                        tx,
+                                    )
+                                    .await?)
+                                })
+                                .await?;
+                            // We have no delivery time here, so we just return 0 to "cancel"
+                            // all the checks that depend on this time in the future.
+                            0
+                        } else if proton_error.code == Mail::ExpirationTimeTooSoon as u32 {
+                            return Err(SendError::ExpirationTimeTooSoon.into());
+                        } else if proton_error.code == Mail::MessageDoesNotExist as u32 {
+                            return Err(SendError::DraftDoesNotExistOnServer.into());
+                        } else if proton_error.code == Mail::TooManyAttachments as u32 {
+                            // Size of body + attachments > 25 mb - shares the same error
+                            // code but is return as `Message to large`
+                            // This can happen when we inherit attachment from a forwarded message
+                            // (e.g: 3x 16 mb attachments) or the body + attachment
+                            // size exceed this limit. In the former, the error is never reported
+                            // from backend on draft save, so we only see this during send.
+                            return Err(SendError::MessageTooLarge.into());
+                        } else {
+                            error!("Failed to send send email request: {err:?}");
+                            return Err(err.into());
+                        }
+                    }
                 }
             }
         };

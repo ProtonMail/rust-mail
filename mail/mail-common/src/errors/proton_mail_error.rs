@@ -367,6 +367,9 @@ impl From<DraftSendError> for ProtonMailError {
             SendError::MessageTooLarge => Self::Reason(MailErrorReason::DraftSendReason(
                 DraftSendErrorReason::MessageTooLarge,
             )),
+            SendError::BadRequest(err) => Self::Reason(MailErrorReason::DraftSendReason(
+                DraftSendErrorReason::BadRequest(err),
+            )),
         }
     }
 }

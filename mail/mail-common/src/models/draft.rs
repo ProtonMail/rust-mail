@@ -595,6 +595,7 @@ pub enum DraftSendFailureSend {
     ExpirationTimeTooSoon,
     MissingAttachmentUploads,
     MessageTooLarge,
+    BadRequest(String),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -699,6 +700,7 @@ impl DraftSendFailure {
                     Self::Send(DraftSendFailureSend::MissingAttachmentUploads)
                 }
                 SendError::MessageTooLarge => Self::Send(DraftSendFailureSend::MessageTooLarge),
+                SendError::BadRequest(e) => Self::Send(DraftSendFailureSend::BadRequest(e.clone())),
             },
             Error::AttachmentUpload(e) => match e {
                 AttachmentUploadError::MessageDoesNotExist
@@ -860,6 +862,7 @@ impl From<DraftSendFailure> for ProtonMailError {
                     DraftSendFailureSend::ScheduleSendLimitExceeded => {
                         DraftSendErrorReason::ScheduleSendMessageLimitExceeded
                     }
+                    DraftSendFailureSend::BadRequest(e) => DraftSendErrorReason::BadRequest(e),
                 }))
             }
             DraftSendFailure::Attachment(err) => match err {
