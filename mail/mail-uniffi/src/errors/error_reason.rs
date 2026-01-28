@@ -157,6 +157,8 @@ pub enum DraftSendErrorReason {
     ExpirationTimeTooSoon,
     /// Message + Attachment size too large
     MessageTooLarge,
+    /// Bad server request - contains localized error string
+    BadRequest(String),
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -200,6 +202,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             RealDraftSendErrorReason::EOPasswordDecrypt => Self::EOPasswordDecrypt,
             RealDraftSendErrorReason::ExpirationTimeTooSoon => Self::ExpirationTimeTooSoon,
             RealDraftSendErrorReason::MessageTooLarge => Self::MessageTooLarge,
+            RealDraftSendErrorReason::BadRequest(e) => Self::BadRequest(e),
         }
     }
 }
