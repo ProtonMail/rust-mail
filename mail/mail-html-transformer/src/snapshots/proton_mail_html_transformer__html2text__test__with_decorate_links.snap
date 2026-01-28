@@ -1,7 +1,6 @@
 ---
 source: mail/mail-html-transformer/src/html2text.rs
 expression: output
-snapshot_kind: text
 ---
 [Alll][1] [Alll][2]
 Alll
@@ -20,5 +19,5 @@ css_background_style_remote
 
 [1]: lol-image.jpg
 [2]: jeanne-image.jpg
-[3]: cid:1234
-[4]: cid:1234
+[3]: cid:01234
+[4]: cid:01234
