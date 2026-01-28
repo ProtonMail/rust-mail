@@ -42,7 +42,9 @@ pub enum MessageBanner {
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
-    UnsubscribeNewsletter { already_unsubscribed: bool },
+    UnsubscribeNewsletter {
+        already_unsubscribed: bool,
+    },
 
     /// The message is scheduled to be sent at a future time.
     ScheduledSend {
@@ -64,6 +66,8 @@ pub enum MessageBanner {
 
     /// The message could not be decrypted.
     UnableToDecrypt,
+
+    DomainAuthFail,
 }
 
 impl Message {
@@ -151,6 +155,10 @@ impl Message {
             banners.push(MessageBanner::UnsubscribeNewsletter {
                 already_unsubscribed,
             });
+        }
+
+        if flags.contains(MessageFlags::DMARC_FAIL) {
+            banners.push(MessageBanner::DomainAuthFail);
         }
 
         banners.sort_unstable();
