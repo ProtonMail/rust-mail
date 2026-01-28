@@ -3,6 +3,7 @@ use proton_core_common::{
     models::{Label, LabelError, ModelExtension},
 };
 use stash::{
+    UserDb,
     macros::Model,
     orm::Model,
     stash::{Bond, Tether},
@@ -72,6 +73,7 @@ impl LabelExt for Label {
 /// "delete all" functionality.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("mail_busy_labels")]
+#[Database(UserDb)]
 pub struct MailBusyLabel {
     #[IdField]
     pub id: LocalLabelId,

@@ -93,6 +93,7 @@ use tracing::{debug, error, info, trace, warn};
 #[derive(Clone, Debug, Eq, Model, PartialEq, ScrollerEq)]
 #[TableName("messages")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct Message {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalMessageId>,
@@ -2540,6 +2541,7 @@ impl AttachmentData {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_labels")]
+#[Database(UserDb)]
 pub struct MessageLabel {
     #[IdField]
     pub local_label_id: LocalLabelId,
@@ -2618,6 +2620,7 @@ impl Message {
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct MessageBodyMetadata {
     #[IdField(optional)]
     pub local_message_id: Option<LocalMessageId>,
@@ -2875,6 +2878,7 @@ impl MessageLabelStats {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_counters")]
+#[Database(UserDb)]
 pub struct MessageCounter {
     #[IdField]
     pub local_label_id: LocalLabelId,

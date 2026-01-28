@@ -44,6 +44,7 @@ impl ModelHooks for MailSettings {
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("mail_settings")]
+#[Database(UserDb)]
 #[ModelHooks]
 pub struct MailSettings {
     #[IdField]

@@ -48,6 +48,7 @@ pub enum LabelError {
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[ModelHooks]
 #[TableName("labels")]
+#[Database(UserDb)]
 pub struct Label {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalLabelId>,

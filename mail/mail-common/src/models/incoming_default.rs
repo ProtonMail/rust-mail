@@ -70,6 +70,7 @@ impl From<ApiIncomingDefaultEvent> for IncomingDefaultEvent {
 #[derive(Clone, Debug, Model, PartialEq)]
 #[TableName("incoming_defaults")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct IncomingDefault {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalIncomingDefaultId>,

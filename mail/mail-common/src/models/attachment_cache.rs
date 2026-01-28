@@ -18,10 +18,10 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model as _;
-use stash::params;
 use stash::stash::{Bond, StashError};
 use stash::stash::{RunTransaction, Tether};
 use stash::utils::placeholders_n;
+use stash::{UserDb, params};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
@@ -42,6 +42,7 @@ use tracing::{debug, error, info, trace, warn};
 /// [`attachments`]: crate::mailbox::attachments
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachment_cache")]
+#[Database(UserDb)]
 pub struct AttachmentCacheMetadata {
     #[IdField]
     pub attachment_id: LocalAttachmentId,

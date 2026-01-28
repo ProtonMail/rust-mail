@@ -71,6 +71,7 @@ impl ToSql for MetadataId {
 /// can be kept up to date with ongoing changes.
 #[derive(Clone, Debug, Eq, Model, PartialEq, TypedBuilder)]
 #[TableName("draft_metadata")]
+#[Database(UserDb)]
 pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[IdField(autoincrement)]
@@ -371,6 +372,7 @@ impl DraftMetadata {
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[ModelHooks]
 #[TableName("draft_send_result")]
+#[Database(UserDb)]
 pub struct DraftSendResult {
     #[IdField]
     pub local_message_id: LocalMessageId,
@@ -950,6 +952,7 @@ impl TableObserver for DraftSendResultTableObserver {
 /// state.
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[TableName("draft_attachment_metadata")]
+#[Database(UserDb)]
 pub struct DraftAttachmentMetadata {
     #[IdField]
     pub local_attachment_id: LocalAttachmentId,

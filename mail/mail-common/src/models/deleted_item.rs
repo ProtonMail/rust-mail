@@ -4,8 +4,8 @@ use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use stash::{UserDb, params};
 use std::collections::HashSet;
 
 #[cfg(test)]
@@ -14,6 +14,7 @@ mod tests;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("deleted_items")]
+#[Database(UserDb)]
 pub struct DeletedItem {
     #[IdField]
     pub remote_id: String,

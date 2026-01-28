@@ -74,6 +74,7 @@ use tracing::{debug, error, info, warn};
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversations")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct Conversation {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalConversationId>,
@@ -2816,6 +2817,7 @@ impl TableObserver for ConversationActionWatcher {
 #[derivative(Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[TableName("conversation_labels")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct ConversationLabel {
     // NOTE: This id is essentially useless. Stash does not support composite primary keys
     // so we do not assign it a special value. The real primary key is
@@ -3291,6 +3293,7 @@ impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_counters")]
+#[Database(UserDb)]
 pub struct ConversationCounter {
     #[IdField]
     pub local_label_id: LocalLabelId,

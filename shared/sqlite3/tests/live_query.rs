@@ -11,6 +11,7 @@ use tokio::spawn as spawn_async;
 
 #[derive(Clone, Debug, Deserialize, Model, PartialEq, Serialize)]
 #[TableName("foo")]
+#[Database(UserDb)]
 pub struct Foo {
     #[IdField]
     pub id: u64,

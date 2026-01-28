@@ -7,8 +7,8 @@ use proton_core_api::services::proton::{ContactEmail as ApiContactEmail, Private
 use proton_core_api::services::proton::{ContactEmailId, ContactId, LabelId};
 use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
-use stash::params;
 use stash::stash::{StashError, Tether};
+use stash::{UserDb, params};
 
 /// Represents a contact's email.
 ///
@@ -16,6 +16,7 @@ use stash::stash::{StashError, Tether};
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_emails")]
+#[Database(UserDb)]
 #[ModelHooks]
 pub struct ContactEmail {
     #[IdField(autoincrement)]

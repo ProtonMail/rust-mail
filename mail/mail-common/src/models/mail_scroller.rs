@@ -87,6 +87,7 @@ where
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_message_scroll_data")]
+#[Database(UserDb)]
 pub struct MessageScrollData {
     #[IdField(optional)]
     #[builder(default)]
@@ -363,6 +364,7 @@ impl ScrollData for MessageScrollData {
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_conversation_scroll_data")]
+#[Database(UserDb)]
 pub struct ConversationScrollData {
     #[IdField(optional)]
     #[builder(default)]
@@ -997,6 +999,7 @@ impl<T: ScrollData> Deref for CachedScrollData<T> {
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_search_scroll_data")]
+#[Database(UserDb)]
 pub struct SearchScrollData {
     #[IdField]
     pub local_message_id: LocalMessageId,

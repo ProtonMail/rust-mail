@@ -18,6 +18,7 @@ use tracing::instrument;
 
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("custom_settings")]
+#[Database(UserDb)]
 pub struct CustomSettings {
     #[IdField]
     pub local_id: CustomSettingsId,

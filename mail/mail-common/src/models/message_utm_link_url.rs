@@ -1,11 +1,12 @@
 use crate::datatypes::LocalMessageId;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{StashError, Tether};
+use stash::{UserDb, params};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Model)]
 #[TableName("message_utm_link_urls")]
+#[Database(UserDb)]
 pub struct MessageUtmLinkUrl {
     #[IdField(autoincrement)]
     pub id: Option<i64>,

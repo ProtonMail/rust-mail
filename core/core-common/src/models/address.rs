@@ -20,6 +20,7 @@ use tracing::{error, warn};
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
 #[ModelHooks]
+#[Database(UserDb)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
     #[IdField(autoincrement)]

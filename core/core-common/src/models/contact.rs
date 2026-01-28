@@ -53,6 +53,7 @@ use tracing::{debug, error, info};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
+#[Database(UserDb)]
 #[ModelHooks]
 pub struct Contact {
     #[IdField(autoincrement)]

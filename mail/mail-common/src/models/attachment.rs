@@ -30,6 +30,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_api::services::proton::responses::GetAttachmentMetadataResponse;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::exports::Connection;
 use stash::exports::Transaction;
 use stash::exports::{SqliteError, ToSql};
@@ -95,6 +96,7 @@ use tracing::{debug, error, info, trace};
 #[derive(Clone, Debug, Eq, Model, PartialEq, Default)]
 #[TableName("attachments")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct Attachment {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAttachmentId>,

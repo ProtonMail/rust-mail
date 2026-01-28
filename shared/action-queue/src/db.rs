@@ -19,10 +19,10 @@ use stash::exports::{
 use stash::exports::{SqliteError, Value};
 use stash::macros::{DbRecord, Model};
 use stash::orm::{DbRecord, Model, ModelHooks};
-use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, StashError, Tether};
 use stash::utils::{ConnectionExt, placeholders, placeholders_n};
+use stash::{UserDb, params};
 use std::collections::HashSet;
 use std::hash::RandomState;
 use std::ops::Add;
@@ -86,6 +86,7 @@ impl ActionDependency {
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
 #[TableName("action_queue")]
 #[ModelHooks]
+#[Database(UserDb)]
 pub struct StoredAction {
     #[IdField(autoincrement)]
     pub id: Option<ActionId>,

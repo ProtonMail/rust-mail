@@ -25,6 +25,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, Us
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("users")]
+#[Database(UserDb)]
 pub struct User {
     #[IdField(optional)]
     pub remote_id: Option<UserId>,

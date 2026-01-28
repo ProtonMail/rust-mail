@@ -6,12 +6,13 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use proton_core_common::models::ModelExtension;
 use proton_issue_reporter_service::{IssueLevel, IssueReportKeys};
-use stash::macros::Model;
+use stash::{UserDb, macros::Model};
 use std::sync::{Arc, Weak};
 use tracing::{Instrument, debug, error, info, instrument};
 
 #[derive(Clone, Debug, Eq, PartialEq, Model)]
 #[TableName("pending_online_migrations")]
+#[Database(UserDb)]
 struct PendingOnlineMigration {
     #[IdField]
     name: String,

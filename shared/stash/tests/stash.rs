@@ -524,6 +524,7 @@ mod orm_tests {
     use crate::params;
     use rusqlite::{Connection, Transaction};
     use stash::{
+        UserDb,
         orm::{Model, ModelHooks},
         stash::{Stash, StashError},
         utils::ConnectionExt,
@@ -533,6 +534,7 @@ mod orm_tests {
     #[derive(Clone, Debug, Eq, Model, PartialEq)]
     #[TableName("my_model")]
     #[ModelHooks]
+    #[Database(UserDb)]
     struct MyModel {
         #[IdField(autoincrement)]
         id: Option<u64>,

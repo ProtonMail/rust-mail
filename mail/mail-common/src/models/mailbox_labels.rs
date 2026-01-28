@@ -9,6 +9,7 @@ use crate::datatypes::{MessageRecipientDisplayMode, SystemLabelId, ViewMode};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelType, SystemLabel};
 use proton_core_common::{datatypes::LocalLabelId, models::Label};
+use stash::UserDb;
 use stash::stash::Tether;
 use stash::{macros::Model, stash::StashError};
 
@@ -18,6 +19,7 @@ use super::MailSettings;
 /// That allows us to keep labels in core-common
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("mailbox_labels")]
+#[Database(UserDb)]
 pub struct MailboxLabels {
     #[IdField]
     pub local_label_id: LocalLabelId,

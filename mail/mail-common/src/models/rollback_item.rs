@@ -17,8 +17,8 @@ use proton_mail_api::services::proton::prelude::{GetConversationResponse, Messag
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, RunTransaction, StashError, Tether};
+use stash::{UserDb, params};
 use std::fmt::Display;
 use tracing::{debug, error, warn};
 
@@ -28,6 +28,7 @@ mod tests;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("rollback_actions")]
+#[Database(UserDb)]
 pub struct RollbackItem {
     #[IdField]
     pub remote_id: String,

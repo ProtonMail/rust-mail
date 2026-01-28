@@ -19,6 +19,7 @@ use crate::datatypes::{InitializationKey, InitializedComponentState};
 ///
 #[derive(Debug, Eq, Model, PartialEq, Clone)]
 #[TableName("initialized_components")]
+#[Database(UserDb)]
 pub struct InitializedComponent {
     #[IdField]
     key: String,
