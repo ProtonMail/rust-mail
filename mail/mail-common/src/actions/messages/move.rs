@@ -10,12 +10,13 @@ use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::{Bond, Tether};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move(pub ActionMoveData<Message>);
 
-impl VersionConverter for Move {
+impl VersionConverter<UserDb> for Move {
     type Output = Self;
 
     fn convert(old_version: u32, _: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -23,7 +24,7 @@ impl VersionConverter for Move {
     }
 }
 
-impl Action for Move {
+impl Action<UserDb> for Move {
     const TYPE: Type = Type("move_messages");
     const VERSION: u32 = 3;
     type VersionConverter = Self;
@@ -41,7 +42,7 @@ pub struct MoveHandler {
     pub api: Session,
 }
 
-impl Handler for MoveHandler {
+impl Handler<UserDb> for MoveHandler {
     type Action = Move;
 
     async fn apply_local(
@@ -49,7 +50,7 @@ impl Handler for MoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<Self::Action, <Self::Action as Action>::Error> {
+    ) -> Result<Self::Action, <Self::Action as Action<UserDb>>::Error> {
         action.0.move_to_async(tx).await?;
         Ok(action.clone())
     }
@@ -59,7 +60,7 @@ impl Handler for MoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.revert_local(tx).await?;
         Ok(())
     }
@@ -68,8 +69,11 @@ impl Handler for MoveHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         action.0.apply_remote(&self.api, guard).await
     }
 
@@ -79,7 +83,7 @@ impl Handler for MoveHandler {
         action: &mut Self::Action,
         rebase_change_set: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.rebase_local(rebase_change_set, tx).await?;
         Ok(())
     }
@@ -91,7 +95,7 @@ pub struct UndoMoveToMessages {
 }
 
 impl UndoMoveToMessages {
-    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+    pub async fn undo(self, queue: &Queue<UserDb>, _: &Tether) -> Result<(), AppError> {
         if queue.cancel(self.id).await.is_ok() {
             // The undoing is done by the revert_local of the action.
             return Ok(());

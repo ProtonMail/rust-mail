@@ -10,6 +10,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_core_common::models::ModelExtension;
 use serde::{self, Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use std::collections::HashSet;
 
@@ -31,7 +32,7 @@ impl RefreshMetadata {
     }
 }
 
-impl Action for RefreshMetadata {
+impl Action<UserDb> for RefreshMetadata {
     const TYPE: Type = Type("refresh_message_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
@@ -47,7 +48,7 @@ pub struct RefreshMetadataHandler {
     pub api: Session,
 }
 
-impl Handler for RefreshMetadataHandler {
+impl Handler<UserDb> for RefreshMetadataHandler {
     type Action = RefreshMetadata;
 
     async fn apply_local(
@@ -55,7 +56,10 @@ impl Handler for RefreshMetadataHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -64,7 +68,7 @@ impl Handler for RefreshMetadataHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -72,8 +76,11 @@ impl Handler for RefreshMetadataHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         if action.local_ids.is_empty() {
             tracing::debug!("Refresh metadata for messages called with empty id list");
             return Ok(());
@@ -108,7 +115,7 @@ impl Handler for RefreshMetadataHandler {
                     .tx(async |tx| {
                         Message::delete_by_ids(action.local_ids.clone(), tx).await?;
                         MessageScrollData::delete_all(tx).await?;
-                        Result::<(), <Self::Action as Action>::Error>::Ok(())
+                        Result::<(), <Self::Action as Action<UserDb>>::Error>::Ok(())
                     })
                     .await?;
 
@@ -136,7 +143,7 @@ impl Handler for RefreshMetadataHandler {
                 .tx(async |tx| {
                     Message::delete_by_ids(not_refreshed, tx).await?;
                     MessageScrollData::delete_all(tx).await?;
-                    Result::<(), <Self::Action as Action>::Error>::Ok(())
+                    Result::<(), <Self::Action as Action<UserDb>>::Error>::Ok(())
                 })
                 .await?;
         }
@@ -150,7 +157,7 @@ impl Handler for RefreshMetadataHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

@@ -12,6 +12,7 @@ use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::info;
 
@@ -31,7 +32,7 @@ impl Ham {
     }
 }
 
-impl Action for Ham {
+impl Action<UserDb> for Ham {
     const TYPE: Type = Type("mark_ham");
     const VERSION: u32 = 1;
 
@@ -52,7 +53,7 @@ pub struct HamHandler {
     pub api: Session,
 }
 
-impl Handler for HamHandler {
+impl Handler<UserDb> for HamHandler {
     type Action = Ham;
 
     async fn apply_local(
@@ -60,7 +61,7 @@ impl Handler for HamHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         if action.0.is_empty() {
             return Err(MailActionError::NoInput);
         }
@@ -77,7 +78,7 @@ impl Handler for HamHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         for &id in &action.0 {
             Message::unset_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }
@@ -97,8 +98,11 @@ impl Handler for HamHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let tether = guard.tether();
         let ids = Message::local_ids_counterpart(action.0.clone(), tether).await?;
 
@@ -117,7 +121,7 @@ impl Handler for HamHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         for &id in &action.0 {
             let rebase_key: RebaseKey = id.into();
             if changeset.contains(&rebase_key) {

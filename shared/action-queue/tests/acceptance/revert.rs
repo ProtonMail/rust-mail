@@ -5,6 +5,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::queue::{ActionError, AsActionError, BroadcastMessage, QueuedError};
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::tests::common::TestDb;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -25,10 +26,10 @@ async fn network_failure_causes_revert_on_apply() {
     let result = queue.new_executor().execute_one().await.unwrap_err();
     match result {
         QueuedError::Action(e, _) => {
-            let err = e.as_action_error::<RevertAction>().unwrap();
+            let err = e.as_action_error::<RevertAction, TestDb>().unwrap();
             assert!(matches!(
                 err,
-                ActionError::<RevertAction>::Action(DefaultError::APIFailure)
+                ActionError::<RevertAction, TestDb>::Action(DefaultError::APIFailure)
             ));
         }
         _ => panic!("unexpected result"),
@@ -80,10 +81,10 @@ async fn network_failure_causes_revert_on_queue() {
         panic!("unexpected queued action error");
     };
 
-    let down_casted = error.as_action_error::<RevertAction>().unwrap();
+    let down_casted = error.as_action_error::<RevertAction, TestDb>().unwrap();
     assert!(matches!(
         down_casted,
-        ActionError::<RevertAction>::Action(DefaultError::APIFailure)
+        ActionError::<RevertAction, TestDb>::Action(DefaultError::APIFailure)
     ));
 
     assert_eq!(metadata.id, action_id);
@@ -205,7 +206,7 @@ struct RevertAction {
     value: u32,
 }
 
-impl Action for RevertAction {
+impl Action<TestDb> for RevertAction {
     const TYPE: Type = Type("revert");
     const VERSION: u32 = 1;
 
@@ -219,15 +220,15 @@ impl Action for RevertAction {
 #[derive(Default)]
 struct RevertActionHandler;
 
-impl Handler for RevertActionHandler {
+impl Handler<TestDb> for RevertActionHandler {
     type Action = RevertAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
     }
 
@@ -235,8 +236,8 @@ impl Handler for RevertActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx.ext_delete_value(&action.key).await?)
     }
 
@@ -244,8 +245,11 @@ impl Handler for RevertActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Err(DefaultError::APIFailure)
     }
 
@@ -254,8 +258,8 @@ impl Handler for RevertActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }
@@ -267,7 +271,7 @@ pub struct ChainCancelAction {
     old_value: u32,
 }
 
-impl Action for ChainCancelAction {
+impl Action<TestDb> for ChainCancelAction {
     const TYPE: Type = Type("chain_revert");
     const VERSION: u32 = 1;
 
@@ -281,15 +285,15 @@ impl Action for ChainCancelAction {
 #[derive(Default)]
 pub struct ChainCancelActionHandler;
 
-impl Handler for ChainCancelActionHandler {
+impl Handler<TestDb> for ChainCancelActionHandler {
     type Action = ChainCancelAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         let old_value = tx.ext_get_value(&action.key).await?.unwrap();
         action.old_value = old_value;
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
@@ -299,8 +303,8 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         let current_value = tx.ext_get_value(&action.key).await?.unwrap();
         assert_eq!(current_value, action.value);
         Ok(tx.ext_insert_value(&action.key, action.old_value).await?)
@@ -310,8 +314,11 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Err(DefaultError::APIFailure)
     }
 
@@ -320,8 +327,8 @@ impl Handler for ChainCancelActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

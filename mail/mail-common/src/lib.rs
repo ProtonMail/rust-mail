@@ -55,6 +55,7 @@ use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use proton_core_common::models::LabelError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use proton_mail_api::services::proton::common::ConversationId;
+use stash::UserDb;
 use stash::stash::StashError;
 use thiserror::Error;
 
@@ -143,8 +144,8 @@ pub enum AppError {
     Other(#[from] anyhow::Error),
 }
 
-impl<T: Action> From<ActionError<T>> for AppError {
-    fn from(value: ActionError<T>) -> Self {
+impl<T: Action<UserDb>> From<ActionError<T, UserDb>> for AppError {
+    fn from(value: ActionError<T, UserDb>) -> Self {
         Self::ActionError(value.into())
     }
 }

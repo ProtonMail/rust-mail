@@ -4,6 +4,7 @@ use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::QueuedError;
 use proton_action_queue::{action::ActionId, queue::ActionError};
+use stash::UserDb;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tracing::error;
@@ -50,7 +51,7 @@ impl UserContext {
     ///
     /// If we are in automatic mode this is a noop.
     ///
-    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll, UserDb>> {
         tracing::debug!("Polling event loop (normal)");
         let event_loop_service = self.event_loop_service();
         self.queue_poll_event_loop(event_loop_service, EventPollIntent::Normal)
@@ -79,7 +80,7 @@ impl UserContext {
     /// Queue an action to execute the event loop as soon as possible regardless of
     /// the selected polling mode.
     ///
-    pub async fn force_event_loop_poll(&self) -> Result<ActionId, ActionError<EventPoll>> {
+    pub async fn force_event_loop_poll(&self) -> Result<ActionId, ActionError<EventPoll, UserDb>> {
         tracing::debug!("Polling event loop (forced)");
         let event_loop_service = self.event_loop_service();
         let action_id = self
@@ -90,7 +91,9 @@ impl UserContext {
         Ok(action_id)
     }
 
-    pub async fn force_event_loop_poll_and_wait(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn force_event_loop_poll_and_wait(
+        &self,
+    ) -> Result<(), ActionError<EventPoll, UserDb>> {
         const MIN_DURATION: Duration = Duration::from_millis(1500);
         let mut awaiter = ActionAwaiter::new(self.queue());
 
@@ -114,7 +117,7 @@ impl UserContext {
         &self,
         event_loop_service: &EventLoopService,
         intent: EventPollIntent,
-    ) -> Result<ActionId, ActionError<EventPoll>> {
+    ) -> Result<ActionId, ActionError<EventPoll, UserDb>> {
         let mut last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
         let (action, priority) = if intent == EventPollIntent::Forced {
             (EventPoll::forced(), Priority::Highest)

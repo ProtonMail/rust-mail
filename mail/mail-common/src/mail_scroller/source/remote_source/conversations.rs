@@ -30,6 +30,7 @@ use proton_mail_api::services::proton::{
     prelude::{GetConversationsOptions, GetConversationsResponse},
     response_data::MessageMetadata as ApiMessageMetadata,
 };
+use stash::UserDb;
 use stash::stash::{Bond, Tether};
 use std::ops::ControlFlow;
 use tracing::{debug, error, info, instrument};
@@ -520,7 +521,7 @@ impl RemoteConversationScrollerSource {
         conversation_labels_count: Vec<ConversationLabelsCount>,
         api: &Session,
         tether: &mut Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError> {
         // Resolve missing dependencies.
         let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();

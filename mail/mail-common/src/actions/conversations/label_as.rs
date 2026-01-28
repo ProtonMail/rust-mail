@@ -1,4 +1,5 @@
 use proton_core_api::session::Session;
+use stash::UserDb;
 
 use crate::AppError;
 use crate::actions::conversations::Move;
@@ -17,14 +18,14 @@ use stash::stash::{Bond, Tether};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Conversation>);
 
-impl VersionConverter for LabelAs {
+impl VersionConverter<UserDb> for LabelAs {
     type Output = Self;
 
     fn convert(old_version: u32, _: u32, data: &[u8]) -> FactoryResult<Self::Output> {
         LabelAsData::convert(old_version, data).map(LabelAs)
     }
 }
-impl Action for LabelAs {
+impl Action<UserDb> for LabelAs {
     const TYPE: Type = Type("label_conversation_as");
     const VERSION: u32 = 3;
     type VersionConverter = Self;
@@ -42,7 +43,7 @@ pub struct LabelAsHandler {
     pub api: Session,
 }
 
-impl Handler for LabelAsHandler {
+impl Handler<UserDb> for LabelAsHandler {
     type Action = LabelAs;
 
     async fn apply_local(
@@ -50,7 +51,7 @@ impl Handler for LabelAsHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<bool, <Self::Action as Action>::Error> {
+    ) -> Result<bool, <Self::Action as Action<UserDb>>::Error> {
         action.0.apply_local_common(tx).await?;
 
         let total = if let Some(label_id) = action.0.source_label_id {
@@ -68,7 +69,7 @@ impl Handler for LabelAsHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.revert_local(tx).await?;
         Ok(())
     }
@@ -77,8 +78,8 @@ impl Handler for LabelAsHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.apply_remote(&self.api, guard).await
     }
 
@@ -88,7 +89,7 @@ impl Handler for LabelAsHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.rebase_local(changeset, tx).await?;
         Ok(())
     }
@@ -106,7 +107,7 @@ pub struct UndoLabelAsArchiveConversations {
 }
 
 impl UndoLabelAsConversations {
-    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+    pub async fn undo(self, queue: &Queue<UserDb>, _: &Tether) -> Result<(), AppError> {
         let cancelled_id = match queue.cancel(self.id).await {
             Ok(ids) => ids,
             Err(_) => {

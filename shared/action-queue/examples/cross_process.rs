@@ -30,6 +30,7 @@ use proton_action_queue::queue::{
 };
 use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{Deserialize, Serialize};
+use stash::marker::DatabaseMarker;
 use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -37,6 +38,10 @@ use std::process::Command;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use uuid::Uuid;
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub struct TestDb;
+impl DatabaseMarker for TestDb {}
 
 #[derive(Debug, Subcommand)]
 enum Commands {
@@ -137,7 +142,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
     println!("DONE");
 }
 
-async fn wait_on_queue_empty(queue: &Queue) {
+async fn wait_on_queue_empty(queue: &Queue<TestDb>) {
     loop {
         let remaining = queue.queued_actions_count().await.unwrap();
         println!("REMAINING {remaining}");
@@ -206,7 +211,7 @@ fn spawn_process(
     (stdin, handle)
 }
 
-async fn new_queue(directory: &Path) -> Queue {
+async fn new_queue(directory: &Path) -> Queue<TestDb> {
     let stash = stash::stash::Stash::new(StashConfiguration::test_with_path(
         &directory.join("sqlite.db"),
     ))
@@ -221,7 +226,7 @@ async fn new_queue(directory: &Path) -> Queue {
 #[derive(Debug, Serialize, Deserialize)]
 struct TestAction;
 
-impl Action for TestAction {
+impl Action<TestDb> for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<TestAction>;
@@ -234,15 +239,18 @@ impl Action for TestAction {
 #[derive(Default)]
 struct TestHandler;
 
-impl Handler for TestHandler {
+impl Handler<TestDb> for TestHandler {
     type Action = TestAction;
 
     async fn apply_local(
         &self,
         id: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::LocalOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         println!(
             "Executor [{}] - Action [{}] - Apply local",
             executor_id(),
@@ -255,8 +263,8 @@ impl Handler for TestHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 
@@ -264,8 +272,11 @@ impl Handler for TestHandler {
         &self,
         id: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         tokio::time::sleep(Duration::from_secs(1)).await;
         println!(
             "Executor [{}] - Action [{}] - Apply Remote",
@@ -279,8 +290,8 @@ impl Handler for TestHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

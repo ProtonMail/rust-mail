@@ -8,6 +8,7 @@ use proton_core_common::actions::event_poll::{ActionEventLoopError, EventPoll};
 use proton_event_loop::EventLoopError;
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::Unexpected;
+use stash::UserDb;
 use std::sync::Arc;
 use tokio::task::AbortHandle;
 
@@ -85,11 +86,12 @@ impl MailUserSession {
         &self,
         callback: Arc<dyn EventLoopErrorObserver>,
     ) -> Result<Arc<EventLoopErrorObserverHandle>, EventError> {
-        let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx()?.action_queue());
+        let mut observer =
+            ActionFailureObserver::<EventPoll, UserDb>::new(self.ctx()?.action_queue());
         let handle = self.ctx()?.spawn(async move {
             while let Ok(v) = observer.next().await {
                 if let ActionFailureReason::Error(err, _) = v {
-                    let err = if let Some(details) = err.as_action_error::<EventPoll>() {
+                    let err = if let Some(details) = err.as_action_error::<EventPoll, UserDb>() {
                         tracing::error!(?details, "Reporting event loop error");
                         match details {
                             ActionError::Action(e) => match e {

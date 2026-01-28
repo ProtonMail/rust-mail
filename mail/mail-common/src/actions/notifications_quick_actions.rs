@@ -18,6 +18,7 @@ use proton_core_common::models::{LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::{Bond, Tether};
 use std::sync::Arc;
 use std::time::Duration;
@@ -196,7 +197,7 @@ struct V0PushNotificationAction {
 }
 
 pub struct PushNotificationActionConverter;
-impl VersionConverter for PushNotificationActionConverter {
+impl VersionConverter<UserDb> for PushNotificationActionConverter {
     type Output = PushNotificationAction;
 
     fn convert(
@@ -220,7 +221,7 @@ impl VersionConverter for PushNotificationActionConverter {
     }
 }
 
-impl Action for PushNotificationAction {
+impl Action<UserDb> for PushNotificationAction {
     const TYPE: Type = Type("push_notification_quick_action");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
@@ -250,7 +251,7 @@ impl PushNotificationActionHandler {
     }
 }
 
-impl Handler for PushNotificationActionHandler {
+impl Handler<UserDb> for PushNotificationActionHandler {
     type Action = PushNotificationAction;
 
     async fn apply_local(
@@ -326,7 +327,7 @@ impl Handler for PushNotificationActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _: WriterGuard<'_>,
+        _: WriterGuard<'_, UserDb>,
     ) -> Result<(), MailActionError> {
         if action.apply_remotely {
             exec_remote(&action.state, &self.api, None, None).await?;
@@ -340,7 +341,7 @@ impl Handler for PushNotificationActionHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

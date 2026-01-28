@@ -192,7 +192,7 @@ impl ModelIdExtension for Message {
     }
 }
 
-type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
+type LabelAsResult = Result<QueuedActionOutput<LabelAs, UserDb>, QueueActionError<LabelAs, UserDb>>;
 
 impl Message {
     /// Open a message in the either context of a label or a conversation.
@@ -220,7 +220,7 @@ impl Message {
         }
     }
 
-    pub async fn action_star(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
+    pub async fn action_star(queue: &Queue<UserDb>, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
@@ -230,7 +230,7 @@ impl Message {
         Self::action_apply_label(queue, label_id, ids).await
     }
 
-    pub async fn action_unstar(queue: &Queue, ids: Vec<LocalMessageId>) -> LabelAsResult {
+    pub async fn action_unstar(queue: &Queue<UserDb>, ids: Vec<LocalMessageId>) -> LabelAsResult {
         let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
@@ -241,7 +241,7 @@ impl Message {
     }
 
     pub async fn action_remove_label(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label: LocalLabelId,
         ids: Vec<LocalMessageId>,
     ) -> LabelAsResult {
@@ -252,7 +252,7 @@ impl Message {
     }
 
     pub async fn action_apply_label(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label: LocalLabelId,
         ids: Vec<LocalMessageId>,
     ) -> LabelAsResult {
@@ -263,33 +263,33 @@ impl Message {
     }
 
     pub async fn action_mark_read(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Read>, QueueActionError<Read>> {
+    ) -> Result<QueuedActionOutput<Read, UserDb>, QueueActionError<Read, UserDb>> {
         let action = Read::new(message_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_mark_unread(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Unread>, QueueActionError<Unread>> {
+    ) -> Result<QueuedActionOutput<Unread, UserDb>, QueueActionError<Unread, UserDb>> {
         let action = Unread::new(message_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_delete(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete, UserDb>, QueueActionError<Delete, UserDb>> {
         let action = Delete::new(label_id, message_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_move(
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalMessageId>,
     ) -> Result<Option<Undo>, MailContextError> {
@@ -319,7 +319,7 @@ impl Message {
     }
 
     pub async fn action_ham(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_ids: Vec<LocalMessageId>,
     ) -> Result<(), MultiActionError> {
         let tether = &queue.stash().connection().await?;
@@ -337,7 +337,7 @@ impl Message {
     }
 
     pub async fn action_report_phishing(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_id: LocalMessageId,
         tether: &Tether,
     ) -> anyhow::Result<()> {
@@ -353,7 +353,7 @@ impl Message {
 
     pub async fn action_label_as(
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         source_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         selected_label_ids: Vec<LocalLabelId>,
@@ -1568,7 +1568,7 @@ impl Message {
         message_id: MessageId,
         api: &Session,
         tx: &mut impl RunTransaction,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         info!("Fetching message");
         let message = api.get_message(message_id).await.map(|v| v.message)?;
@@ -1790,12 +1790,12 @@ impl Message {
     }
 
     pub async fn action_delete_all_in_label(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<
-        Option<QueuedActionOutput<DeleteAllMessagesInLabel>>,
-        QueueActionError<DeleteAllMessagesInLabel>,
+        Option<QueuedActionOutput<DeleteAllMessagesInLabel, UserDb>>,
+        QueueActionError<DeleteAllMessagesInLabel, UserDb>,
     > {
         let action = DeleteAllMessagesInLabel::new(label_id, tether)
             .await

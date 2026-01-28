@@ -11,12 +11,13 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncIncomingDefaults;
 
-impl Action for SyncIncomingDefaults {
+impl Action<UserDb> for SyncIncomingDefaults {
     const TYPE: Type = Type("update_incoming_defaults");
     const VERSION: u32 = 1;
 
@@ -36,7 +37,7 @@ pub struct SyncIncomingDefaultsHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for SyncIncomingDefaultsHandler {
+impl Handler<UserDb> for SyncIncomingDefaultsHandler {
     type Action = SyncIncomingDefaults;
 
     async fn apply_local(
@@ -44,7 +45,7 @@ impl Handler for SyncIncomingDefaultsHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -53,7 +54,7 @@ impl Handler for SyncIncomingDefaultsHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -61,14 +62,17 @@ impl Handler for SyncIncomingDefaultsHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let data = IncomingDefault::sync(&self.api).await?;
 
         tracing::info!("Updating incoming defaults");
 
         guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+            .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                 IncomingDefault::replace_all(
                     data.into_iter().map(IncomingDefault::from).collect(),
                     tx,
@@ -87,7 +91,7 @@ impl Handler for SyncIncomingDefaultsHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

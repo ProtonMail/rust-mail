@@ -11,6 +11,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use serde::{self, Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::collections::{HashMap, HashSet};
@@ -34,7 +35,7 @@ impl RefreshMetadata {
     }
 }
 
-impl Action for RefreshMetadata {
+impl Action<UserDb> for RefreshMetadata {
     const TYPE: Type = Type("refresh_conversation_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
@@ -50,7 +51,7 @@ pub struct RefreshMetadataHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for RefreshMetadataHandler {
+impl Handler<UserDb> for RefreshMetadataHandler {
     type Action = RefreshMetadata;
 
     async fn apply_local(
@@ -58,7 +59,10 @@ impl Handler for RefreshMetadataHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -67,7 +71,7 @@ impl Handler for RefreshMetadataHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -75,8 +79,11 @@ impl Handler for RefreshMetadataHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
 
         if action.local_ids.is_empty() {
@@ -110,7 +117,7 @@ impl Handler for RefreshMetadataHandler {
                     .tx(async |tx| {
                         Conversation::delete_by_ids(action.local_ids.clone(), tx).await?;
                         ConversationScrollData::delete_all(tx).await?;
-                        Result::<(), <Self::Action as Action>::Error>::Ok(())
+                        Result::<(), <Self::Action as Action<UserDb>>::Error>::Ok(())
                     })
                     .await?;
 
@@ -148,7 +155,7 @@ impl Handler for RefreshMetadataHandler {
                 .tx(async |tx| {
                     Conversation::delete_by_ids(not_refreshed, tx).await?;
                     ConversationScrollData::delete_all(tx).await?;
-                    Result::<(), <Self::Action as Action>::Error>::Ok(())
+                    Result::<(), <Self::Action as Action<UserDb>>::Error>::Ok(())
                 })
                 .await?;
         }
@@ -165,7 +172,7 @@ impl Handler for RefreshMetadataHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }
@@ -173,7 +180,7 @@ impl Handler for RefreshMetadataHandler {
 async fn refresh_conversation_messages(
     conversation: Conversation,
     ctx: &MailUserContext,
-    guard: &mut WriterGuard<'_>,
+    guard: &mut WriterGuard<'_, UserDb>,
 ) -> Result<(), MailActionError> {
     let local_id = conversation.id();
     let conv_count = Conversation::message_count(local_id, guard.tether()).await?;

@@ -9,6 +9,7 @@ use proton_action_queue::action::{
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, RunTransaction};
 use tracing::warn;
@@ -81,7 +82,7 @@ impl UpdateMobileActions {
     }
 }
 
-impl Action for UpdateMobileActions {
+impl Action<UserDb> for UpdateMobileActions {
     const TYPE: Type = Type("update_mobile_actions");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
@@ -95,7 +96,7 @@ pub struct UpdateMobileActionsHandler {
     pub api: Session,
 }
 
-impl Handler for UpdateMobileActionsHandler {
+impl Handler<UserDb> for UpdateMobileActionsHandler {
     type Action = UpdateMobileActions;
 
     async fn apply_local(
@@ -103,7 +104,7 @@ impl Handler for UpdateMobileActionsHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut mail_settings = match MailSettings::get(bond.tether()).await? {
             Some(ms) => ms,
             None => {
@@ -146,7 +147,7 @@ impl Handler for UpdateMobileActionsHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         if let Some(old_mobile_settings) = action.old_mobile_settings.clone() {
             let mut mail_settings = match MailSettings::get(bond.tether()).await? {
                 Some(ms) => ms,
@@ -169,8 +170,11 @@ impl Handler for UpdateMobileActionsHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         if let Some(mobile_settings) = action.new_mobile_settings.clone() {
             MailSettings::update_mobile_settings(&self.api, mobile_settings)
                 .await
@@ -188,7 +192,7 @@ impl Handler for UpdateMobileActionsHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

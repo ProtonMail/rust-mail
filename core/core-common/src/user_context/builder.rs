@@ -65,7 +65,7 @@ impl UserContextBuilder {
         session: Session,
         context: Arc<Context>,
         user_stash: Stash<UserDb>,
-        queue: Queue,
+        queue: Queue<UserDb>,
         user_id: UserId,
         session_id: SessionId,
         key_manager: Arc<CryptoKeyManager>,

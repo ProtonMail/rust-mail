@@ -15,6 +15,7 @@ use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyModifiers};
 use flume::Sender;
 use futures::FutureExt;
+use stash::UserDb;
 
 use crate::widgets::utils::date_from_timestamp;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
@@ -733,7 +734,8 @@ fn background_worker(
 ) -> Command<Messages> {
     Command::background_task(|sender| {
         async move {
-            let mut observer = ActionFailureObserver::<EventPoll>::new(context.action_queue());
+            let mut observer =
+                ActionFailureObserver::<EventPoll, UserDb>::new(context.action_queue());
             loop {
                 tokio::select! {
                 () = cancel_token.cancelled() => {
@@ -890,7 +892,7 @@ async fn observe_event_loop_errors(
     cancellation_token: CancellationToken,
     sender: Sender<Command<Messages>>,
 ) {
-    let mut oberserver = ActionFailureObserver::<EventPoll>::new(ctx.action_queue());
+    let mut oberserver = ActionFailureObserver::<EventPoll, UserDb>::new(ctx.action_queue());
 
     loop {
         select! {
@@ -911,7 +913,7 @@ async fn observe_event_loop_errors(
 // Convert the error into a user displayable message.
 async fn handle_event_loop_error(error: ActionFailureReason, sender: &Sender<Command<Messages>>) {
     if let ActionFailureReason::Error(e, _) = error {
-        let cmd = if let Some(details) = e.as_action_error::<EventPoll>() {
+        let cmd = if let Some(details) = e.as_action_error::<EventPoll, UserDb>() {
             match details {
                 ActionError::Action(e) => Command::message(Messages::DisplayError(
                     Some("Event Loop".to_owned()),

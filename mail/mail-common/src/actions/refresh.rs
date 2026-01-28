@@ -7,6 +7,7 @@ use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
 use proton_event_loop::MAX_ERROR_RETRIES;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use std::sync::Weak;
 
@@ -23,7 +24,7 @@ impl ActionRefresh {
     }
 }
 
-impl Action for ActionRefresh {
+impl Action<UserDb> for ActionRefresh {
     const TYPE: Type = Type("refresh");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
@@ -39,7 +40,7 @@ pub struct ActionRefreshHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for ActionRefreshHandler {
+impl Handler<UserDb> for ActionRefreshHandler {
     type Action = ActionRefresh;
 
     async fn apply_local(
@@ -47,7 +48,10 @@ impl Handler for ActionRefreshHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -56,7 +60,7 @@ impl Handler for ActionRefreshHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -64,8 +68,11 @@ impl Handler for ActionRefreshHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self
             .ctx
             .upgrade()
@@ -100,7 +107,7 @@ impl Handler for ActionRefreshHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

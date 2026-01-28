@@ -5,6 +5,7 @@ use proton_action_queue::action::{
 use proton_action_queue::observers::{ActionAwaiter, ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::BroadcastMessage;
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::tests::common::TestDb;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
@@ -24,8 +25,8 @@ async fn failure_action_observer_remote() {
     let id_execute = queue.queue_action(ErrorAction {}).await.unwrap().id;
     let _ = queue.queue_action(SuccessAction {}).await.unwrap();
 
-    let mut error_observer = ActionFailureObserver::<ErrorAction>::new(&queue);
-    let mut success_observer = ActionFailureObserver::<SuccessAction>::new(&queue);
+    let mut error_observer = ActionFailureObserver::<ErrorAction, TestDb>::new(&queue);
+    let mut success_observer = ActionFailureObserver::<SuccessAction, TestDb>::new(&queue);
 
     // check cancelled response.
     queue.cancel(id_cancel).await.unwrap();
@@ -128,7 +129,7 @@ async fn action_awaiter() {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorAction;
 
-impl Action for ErrorAction {
+impl Action<TestDb> for ErrorAction {
     const TYPE: Type = Type("remote_error_action");
     const VERSION: u32 = 1;
 
@@ -142,15 +143,18 @@ impl Action for ErrorAction {
 #[derive(Default)]
 pub struct ErrorActionHandler;
 
-impl Handler for ErrorActionHandler {
+impl Handler<TestDb> for ErrorActionHandler {
     type Action = ErrorAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::LocalOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -158,8 +162,8 @@ impl Handler for ErrorActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 
@@ -167,8 +171,11 @@ impl Handler for ErrorActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Err(DefaultError::APIFailure)
     }
 
@@ -177,8 +184,8 @@ impl Handler for ErrorActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }
@@ -186,7 +193,7 @@ impl Handler for ErrorActionHandler {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SuccessAction;
 
-impl Action for SuccessAction {
+impl Action<TestDb> for SuccessAction {
     const TYPE: Type = Type("success_action");
     const VERSION: u32 = 1;
 
@@ -200,15 +207,18 @@ impl Action for SuccessAction {
 #[derive(Default)]
 pub struct SuccessActionHandler;
 
-impl Handler for SuccessActionHandler {
+impl Handler<TestDb> for SuccessActionHandler {
     type Action = SuccessAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::LocalOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -216,8 +226,8 @@ impl Handler for SuccessActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 
@@ -225,8 +235,11 @@ impl Handler for SuccessActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -235,8 +248,8 @@ impl Handler for SuccessActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

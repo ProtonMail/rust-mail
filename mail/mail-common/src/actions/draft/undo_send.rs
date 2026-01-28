@@ -19,6 +19,7 @@ use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 use tracing::{error, info, warn};
@@ -46,7 +47,7 @@ impl UndoSend {
     }
 }
 
-impl Action for UndoSend {
+impl Action<UserDb> for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
@@ -63,7 +64,7 @@ pub struct UndoSendHandler {
     pub api: Session,
 }
 
-impl Handler for UndoSendHandler {
+impl Handler<UserDb> for UndoSendHandler {
     type Action = UndoSend;
 
     async fn apply_local(
@@ -71,7 +72,7 @@ impl Handler for UndoSendHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // Check if message is in sent folder or outbox + sent flag
         info!("Undo send for {:?}", action.id);
 
@@ -129,7 +130,7 @@ impl Handler for UndoSendHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let Some(mut message) = Message::find_by_id(action.id, tx).await? else {
             warn!("Message not found: {}", action.id);
             return Ok(());
@@ -163,8 +164,11 @@ impl Handler for UndoSendHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let remote_id = action
             .remote_id
             .clone()
@@ -188,7 +192,7 @@ impl Handler for UndoSendHandler {
         };
 
         guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+            .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                 let mut message = Message::from_api_metadata(response.message, tx)
                     .await
                     .inspect_err(|e| error!("Failed to convert remote metadata:{e:?}"))?;
@@ -208,7 +212,7 @@ impl Handler for UndoSendHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

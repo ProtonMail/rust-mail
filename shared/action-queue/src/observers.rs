@@ -6,9 +6,9 @@ use std::sync::Arc;
 use tokio::sync::broadcast::{Receiver, error::RecvError};
 
 /// This observer only reports failures of a given action type.
-pub struct ActionFailureObserver<T: Action> {
+pub struct ActionFailureObserver<T: Action<Db>, Db: stash::marker::DatabaseMarker> {
     receiver: Receiver<BroadcastMessage>,
-    p: PhantomData<T>,
+    p: PhantomData<(T, Db)>,
 }
 
 /// Reason why the action failed.
@@ -22,10 +22,10 @@ pub enum ActionFailureReason {
     Deleted(ActionId),
 }
 
-impl<T: Action> ActionFailureObserver<T> {
+impl<T: Action<Db>, Db: stash::marker::DatabaseMarker> ActionFailureObserver<T, Db> {
     /// Create a new instance which observes a given `queue`
     #[must_use]
-    pub fn new(queue: &Queue) -> Self {
+    pub fn new(queue: &Queue<Db>) -> Self {
         Self {
             receiver: queue.new_broadcast_receiver(),
             p: PhantomData,
@@ -69,7 +69,7 @@ pub struct ActionAwaiter {
 impl ActionAwaiter {
     /// Create a new instance to wait on the action with `action_id` queue in the given `queue`.
     #[must_use]
-    pub fn new(queue: &Queue) -> Self {
+    pub fn new<Db: stash::marker::DatabaseMarker>(queue: &Queue<Db>) -> Self {
         Self {
             receiver: queue.new_broadcast_receiver(),
         }

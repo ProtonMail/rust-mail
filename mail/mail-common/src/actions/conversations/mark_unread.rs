@@ -15,6 +15,7 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::exports::Transaction;
 use stash::stash::{Bond, RunTransaction};
 use tracing::error;
@@ -29,7 +30,7 @@ impl MarkUnread {
     }
 }
 
-impl Action for MarkUnread {
+impl Action<UserDb> for MarkUnread {
     const TYPE: Type = Type("mark_conversations_unread");
     const VERSION: u32 = 1;
 
@@ -48,7 +49,7 @@ pub struct MarkUnreadHandler {
     pub api: Session,
 }
 
-impl Handler for MarkUnreadHandler {
+impl Handler<UserDb> for MarkUnreadHandler {
     type Action = MarkUnread;
 
     async fn apply_local(
@@ -56,7 +57,7 @@ impl Handler for MarkUnreadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label_id = action.0.label_id;
         action
             .0
@@ -72,7 +73,7 @@ impl Handler for MarkUnreadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let modified_message_ids = action.0.modified_message_ids();
         Message::mark_read_async(modified_message_ids, tx).await?;
         Ok(())
@@ -82,8 +83,11 @@ impl Handler for MarkUnreadHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         // API call return an error 2501(Conversation was not updated) for conversation already unread
         let (remote_label_id, remote_target_ids) = action.0.resolve_ids(guard.tether()).await?;
         if remote_target_ids.is_empty() {
@@ -128,7 +132,7 @@ impl Handler for MarkUnreadHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label_id = action.0.label_id;
         action
             .0

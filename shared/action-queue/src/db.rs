@@ -19,10 +19,10 @@ use stash::exports::{
 use stash::exports::{SqliteError, Value};
 use stash::macros::{DbRecord, Model};
 use stash::orm::{DbRecord, Model, ModelHooks};
+use stash::params;
 use stash::rusqlite::{OptionalExtension, params_from_iter};
 use stash::stash::{Bond, StashError, Tether};
 use stash::utils::{ConnectionExt, placeholders, placeholders_n};
-use stash::{UserDb, params};
 use std::collections::HashSet;
 use std::hash::RandomState;
 use std::ops::Add;
@@ -86,8 +86,8 @@ impl ActionDependency {
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
 #[TableName("action_queue")]
 #[ModelHooks]
-#[Database(UserDb)]
-pub struct StoredAction {
+#[Database(Db)]
+pub struct StoredAction<Db: stash::marker::DatabaseMarker> {
     #[IdField(autoincrement)]
     pub id: Option<ActionId>,
 
@@ -124,12 +124,14 @@ pub struct StoredAction {
 
     // Note this field is only used for storage into the db.
     pub dependency_keys: ActionDependencyKeys,
+
+    pub _phantom: std::marker::PhantomData<Db>,
 }
 
-impl StoredAction {
+impl<Db: stash::marker::DatabaseMarker> StoredAction<Db> {
     /// Create a new stored action with the given `action` state and `metadata`.
     #[allow(dead_code)]
-    pub(crate) fn new<T: Action>(
+    pub(crate) fn new<T: Action<Db>>(
         action: &T,
         metadata: Metadata,
     ) -> Result<Self, rmp_serde::encode::Error> {
@@ -143,14 +145,14 @@ impl StoredAction {
 
     #[must_use]
     /// Create a stored action without any state and the given `metadata`.
-    pub fn without_state<T: Action>(
+    pub fn without_state<T: Action<Db>>(
         dependency_keys: ActionDependencyKeys,
         metadata: Metadata,
     ) -> Self {
         Self::new_impl::<T>(vec![], dependency_keys, metadata)
     }
 
-    fn new_impl<T: Action>(
+    fn new_impl<T: Action<Db>>(
         state: Vec<u8>,
         dependency_keys: ActionDependencyKeys,
         metadata: Metadata,
@@ -172,13 +174,14 @@ impl StoredAction {
             action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
             dependency_keys,
             retries: 0,
+            _phantom: std::marker::PhantomData,
         }
     }
 
     /// Update the action state for this store action.
     ///
     /// Note this does not save to the database, use [`update_action_state()`] for that purpose.
-    pub(crate) fn set_action_state<T: Action>(
+    pub(crate) fn set_action_state<T: Action<Db>>(
         &mut self,
         action: &T,
     ) -> Result<(), rmp_serde::encode::Error> {
@@ -188,7 +191,7 @@ impl StoredAction {
     }
 
     /// Update the action state for this stored action.
-    pub(crate) async fn update_action_state(&self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub(crate) async fn update_action_state(&self, bond: &Bond<'_, Db>) -> Result<(), StashError> {
         bond.execute(
             format!("UPDATE {} SET state=? WHERE id = ?", Self::table_name()),
             params![self.state.clone(), self.id.unwrap()],
@@ -201,7 +204,10 @@ impl StoredAction {
     ///
     /// Should be called only when it can be "requeued".
     ///
-    pub(crate) async fn update_retries(bond: &Bond<'_>, id: ActionId) -> Result<(), StashError> {
+    pub(crate) async fn update_retries(
+        bond: &Bond<'_, Db>,
+        id: ActionId,
+    ) -> Result<(), StashError> {
         bond.execute(
             format!(
                 "UPDATE {} SET retries=retries+1 WHERE id = ?",
@@ -213,7 +219,7 @@ impl StoredAction {
         Ok(())
     }
 
-    pub(crate) async fn get_retries(tether: &Tether, id: ActionId) -> Result<u32, StashError> {
+    pub(crate) async fn get_retries(tether: &Tether<Db>, id: ActionId) -> Result<u32, StashError> {
         let retries = tether
             .query_value::<_, u32>(
                 format!("SELECT retries FROM {} WHERE id = ?", Self::table_name()),
@@ -234,18 +240,18 @@ impl StoredAction {
     }
 
     /// Return the number of pending actions in the queue.
-    pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
+    pub async fn pending_count(tether: &Tether<Db>) -> Result<u64, StashError> {
         Self::count("", vec![], tether).await
     }
 
     /// Return the number of pending actions in the queue for a given action type.
     ///
-    pub async fn type_count<T: Action>(tether: &Tether) -> Result<u64, StashError> {
+    pub async fn type_count<T: Action<Db>>(tether: &Tether<Db>) -> Result<u64, StashError> {
         Self::count("where action_type = ?", params![T::TYPE.as_ref()], tether).await
     }
 
-    pub async fn find_next_action<T: Action>(
-        tether: &Tether,
+    pub async fn find_next_action<T: Action<Db>>(
+        tether: &Tether<Db>,
     ) -> Result<Option<ActionId>, StashError> {
         tether
             .query_value_opt::<ActionId>(
@@ -256,7 +262,7 @@ impl StoredAction {
     }
 
     /// Check whether the action with `id` is in the queue.
-    pub async fn contains(tether: &Tether, id: ActionId) -> Result<bool, StashError> {
+    pub async fn contains(tether: &Tether<Db>, id: ActionId) -> Result<bool, StashError> {
         match tether
             .query_value::<_, ActionId>("SELECT id FROM action_queue WHERE id = ?", params![id])
             .await
@@ -282,7 +288,7 @@ impl StoredAction {
     /// This operation does not operate within execution guards. It is intended to be used
     /// before queue executor is resumed (during app initialization). Use with caution.
     pub async fn delete_all_in_group(
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
         group: ActionGroup,
     ) -> Result<(), StashError> {
         bond.execute(
@@ -296,7 +302,7 @@ impl StoredAction {
     /// Delete action with `id` from the database.
     ///
     /// Returns the type of the deleted action if it still exists.
-    pub async fn delete(bond: &Bond<'_>, id: ActionId) -> Result<Option<String>, StashError> {
+    pub async fn delete(bond: &Bond<'_, Db>, id: ActionId) -> Result<Option<String>, StashError> {
         match bond
             .query_value::<_, String>(
                 "DELETE FROM action_queue WHERE id = ? RETURNING action_type",
@@ -310,7 +316,10 @@ impl StoredAction {
         }
     }
 
-    pub async fn delete_by_type(bond: &Bond<'_>, action_type: &Type) -> Result<usize, StashError> {
+    pub async fn delete_by_type(
+        bond: &Bond<'_, Db>,
+        action_type: &Type,
+    ) -> Result<usize, StashError> {
         bond.execute(
             "DELETE FROM action_queue WHERE action_type = ?",
             params![action_type.0],
@@ -320,7 +329,7 @@ impl StoredAction {
 
     /// Get all the actions which depend on the action with `id`.
     pub async fn all_dependees(
-        tether: &Tether,
+        tether: &Tether<Db>,
         id: ActionId,
     ) -> Result<Vec<ActionDependency>, StashError> {
         tether
@@ -332,7 +341,7 @@ impl StoredAction {
     }
 
     pub async fn all_dependencies(
-        tether: &Tether,
+        tether: &Tether<Db>,
         id: ActionId,
     ) -> Result<Vec<ActionDependency>, StashError> {
         tether
@@ -353,7 +362,7 @@ impl StoredAction {
 
     /// Get all the actions which depend on the action with `id` with a given dependency type.
     pub async fn dependees_of_type(
-        tether: &Tether,
+        tether: &Tether<Db>,
         id: ActionId,
         dependency_type: DependencyType,
     ) -> Result<Vec<ActionId>, StashError> {
@@ -371,8 +380,8 @@ impl StoredAction {
     /// from this function there are no actions that can be executed at this point.
     pub(crate) async fn next(
         action_group: &str,
-        tether: &Tether,
-    ) -> Result<Option<StoredAction>, StashError> {
+        tether: &Tether<Db>,
+    ) -> Result<Option<StoredAction<Db>>, StashError> {
         Self::next_with_timeout(action_group, DEFAULT_LOCK_TIMEOUT, tether).await
     }
 
@@ -383,8 +392,8 @@ impl StoredAction {
     async fn next_with_timeout(
         action_group: &str,
         timeout: Duration,
-        tether: &Tether,
-    ) -> Result<Option<StoredAction>, StashError> {
+        tether: &Tether<Db>,
+    ) -> Result<Option<StoredAction<Db>>, StashError> {
         let now = Utc::now();
         StoredAction::find_first(
             "
@@ -414,7 +423,7 @@ impl StoredAction {
     pub async fn create_or_update(
         &mut self,
         existing_id: ActionId,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<(), StashError> {
         if let Some(existing) =
             StoredAction::find_first("WHERE id = ?", params![existing_id], bond).await?
@@ -445,8 +454,8 @@ impl StoredAction {
     pub async fn pop(
         executor_id: String,
         action_group: &str,
-        tether: &mut Tether,
-    ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
+        tether: &mut Tether<Db>,
+    ) -> Result<Option<(ExecutionGuard, StoredAction<Db>)>, StashError> {
         tether
             .tx(async |tx| {
                 ExecutionGuard::clear_slate_state(executor_id.clone(), tx).await?;
@@ -468,7 +477,7 @@ impl StoredAction {
     // while we are processing this query.
     pub async fn rebase_action_order(
         action_group: &str,
-        tx: &Bond<'_>,
+        tx: &Bond<'_, Db>,
     ) -> Result<Vec<ActionId>, StashError> {
         tx.query_values::<_, ActionId>(
             "SELECT id FROM action_queue WHERE action_group = ? ORDER BY created ASC, rowid ASC",
@@ -478,7 +487,7 @@ impl StoredAction {
     }
 }
 
-impl ModelHooks for StoredAction {
+impl<Db: stash::marker::DatabaseMarker> ModelHooks for StoredAction<Db> {
     fn after_load(&mut self, conn: &Connection) -> Result<(), StashError> {
         // Dependencies
         let dependencies = Self::all_dependencies_sync(conn, self.id())
@@ -598,7 +607,10 @@ pub struct ExecutionGuard {
 
 impl ExecutionGuard {
     /// Check whether the action with `action_id` is being executed.
-    pub async fn has_executor(action_id: ActionId, bond: &Bond<'_>) -> Result<bool, StashError> {
+    pub async fn has_executor<Db: stash::marker::DatabaseMarker>(
+        action_id: ActionId,
+        bond: &Bond<'_, Db>,
+    ) -> Result<bool, StashError> {
         // While this function could be written to accept a Tether instead, it would bypass
         // the exclusive writer access, which is required for this to work.
         let has_executor = match bond
@@ -624,20 +636,20 @@ impl ExecutionGuard {
     /// This method does not check if we can legally acquire the execution lock.
     /// [`StoredAction::next()`] performs all the checks and returns the next action that
     /// can be acquired.
-    pub async fn acquire(
+    pub async fn acquire<Db: stash::marker::DatabaseMarker>(
         action_id: ActionId,
         executor_id: impl Into<String>,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<Self, StashError> {
         Self::acquire_with_timestamp(action_id, executor_id, Utc::now(), bond).await
     }
 
     /// Same as [`acquire`] but allows one to specify the [`timestamp`] of acquisition.
-    pub async fn acquire_with_timestamp(
+    pub async fn acquire_with_timestamp<Db: stash::marker::DatabaseMarker>(
         action_id: ActionId,
         executor_id: impl Into<String>,
         timestamp: DateTime<Utc>,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<Self, StashError> {
         let executor_id = executor_id.into();
         let permit_id = bond
@@ -663,9 +675,9 @@ impl ExecutionGuard {
 
     /// Clean any leftover stale locks. These can occur if the execution of background task
     /// is aborted or if for some reason we never managed to properly release our previous lock.
-    pub(crate) async fn clear_slate_state(
+    pub(crate) async fn clear_slate_state<Db: stash::marker::DatabaseMarker>(
         executor_id: String,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<(), StashError> {
         bond.execute(
             "DELETE FROM action_queue_lock WHERE executor_id= ?",
@@ -751,11 +763,13 @@ impl ExecutionGuard {
 }
 
 #[tracing::instrument(name = "Action Table Setup", skip(conn))]
-pub async fn migrate(conn: &mut Tether) -> Result<(), MigratorError> {
+pub async fn migrate<Db: stash::marker::DatabaseMarker>(
+    conn: &mut Tether<Db>,
+) -> Result<(), MigratorError> {
     const TABLE: &str = "action_queue_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
 
-    proton_sqlite3::Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
+    proton_sqlite3::Migrator::new(TABLE, embedded_migrations::<Db>(&MIGRATIONS))
         .migrate(conn)
         .await?;
 
@@ -798,27 +812,27 @@ impl ActionDependencyKeysTable {
             ).map_err(Into::into)
     }
 
-    pub async fn resolve_dependency_keys(
+    pub async fn resolve_dependency_keys<Db: stash::marker::DatabaseMarker>(
         keys: Vec<ActionDependencyKey>,
-        tether: &Tether,
+        tether: &Tether<Db>,
     ) -> Result<Vec<ActionId>, StashError> {
         tether
             .sync_query(move |tx| Self::resolve_dependency_keys_sync(&keys, tx))
             .await
     }
 
-    pub async fn store_dependency_keys(
+    pub async fn store_dependency_keys<Db: stash::marker::DatabaseMarker>(
         keys: Vec<ActionDependencyKey>,
         action_id: ActionId,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<(), StashError> {
         bond.sync_bridge(move |tx| Self::store_dependency_keys_sync(keys, action_id, tx))
             .await
     }
 
-    pub async fn delete_for_action_id(
+    pub async fn delete_for_action_id<Db: stash::marker::DatabaseMarker>(
         action_id: ActionId,
-        bond: &Bond<'_>,
+        bond: &Bond<'_, Db>,
     ) -> Result<(), StashError> {
         bond.execute(
             format!("DELETE FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE action_id = ?"),

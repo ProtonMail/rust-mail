@@ -279,8 +279,10 @@ impl From<ImageLoaderError<MailContextError>> for MailContextError {
 
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
-impl<T: Action<Error: Into<MailContextError>>> From<QueueActionError<T>> for MailContextError {
-    fn from(value: QueueActionError<T>) -> Self {
+impl<T: Action<UserDb, Error: Into<MailContextError>>> From<QueueActionError<T, UserDb>>
+    for MailContextError
+{
+    fn from(value: QueueActionError<T, UserDb>) -> Self {
         match value {
             QueueActionError::Action(e) => e.into(),
             QueueActionError::Queue(e) => Self::ActionQueue(e),

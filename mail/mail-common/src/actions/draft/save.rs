@@ -33,8 +33,8 @@ use proton_mail_api::services::proton::prelude::{
 use proton_mail_api::services::proton::request_data::DraftSender;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, StashError};
+use stash::{UserDb, params};
 use std::sync::Weak;
 use tracing::{debug, error, info, warn};
 
@@ -127,7 +127,7 @@ impl Save {
     }
 }
 
-impl Action for Save {
+impl Action<UserDb> for Save {
     const TYPE: Type = Type("save_draft");
     const VERSION: u32 = 3;
     const PRIORITY: Priority = Priority::High;
@@ -142,7 +142,7 @@ impl Action for Save {
 
 pub struct SaveVersionConverter {}
 
-impl VersionConverter for SaveVersionConverter {
+impl VersionConverter<UserDb> for SaveVersionConverter {
     type Output = Save;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -158,7 +158,7 @@ pub struct SaveHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for SaveHandler {
+impl Handler<UserDb> for SaveHandler {
     type Action = Save;
 
     async fn apply_local(
@@ -166,7 +166,10 @@ impl Handler for SaveHandler {
         action_id: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         info!("Saving Draft {}", action.metadata_id);
 
         let local_draft_id = local_draft_label_id(bond).await?;
@@ -382,7 +385,7 @@ impl Handler for SaveHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // Don't remove resources if draft failed to create.
         // These items will be removed via a discard action.
         Ok(())
@@ -392,8 +395,11 @@ impl Handler for SaveHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
         let r = Save::apply_remote_impl(&ctx, action, &mut guard).await;
 
@@ -412,7 +418,7 @@ impl Handler for SaveHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }
@@ -421,8 +427,8 @@ impl Save {
     async fn apply_remote_impl(
         ctx: &MailUserContext,
         action: &mut Self,
-        guard: &mut WriterGuard<'_>,
-    ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
+        guard: &mut WriterGuard<'_, UserDb>,
+    ) -> Result<<Self as Action<UserDb>>::RemoteOutput, <Self as Action<UserDb>>::Error> {
         let session = ctx.session();
 
         let mut metadata = DraftMetadata::find_by_id(action.metadata_id, guard.tether())
@@ -602,7 +608,7 @@ impl Save {
         };
 
         guard
-            .tx::<_, _, <Self as Action>::Error>(async |bond| {
+            .tx::<_, _, <Self as Action<UserDb>>::Error>(async |bond| {
                 // There is a small chance that, some rogue event or state update could have
                 // brought in the new draft before we have received the message from
                 // the server and applied the changes in the db. This can happen if we have
@@ -1007,7 +1013,7 @@ impl Save {
 // Simple wrapper function to catch errors
 async fn save_send_error(
     action: &Save,
-    guard: &mut WriterGuard<'_>,
+    guard: &mut WriterGuard<'_, UserDb>,
     error: &MailContextError,
 ) -> Result<(), WriterGuardError> {
     let error = DraftSendFailure::from_mail_context_error(error);

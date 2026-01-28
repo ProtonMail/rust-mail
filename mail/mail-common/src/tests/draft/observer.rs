@@ -13,6 +13,7 @@ use proton_core_common::datatypes::{AddressFlags, AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::test_utils::db::new_test_connection_file;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 #[tokio::test]
@@ -255,6 +256,7 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
         dependency_keys: Default::default(),
         version: 1,
         retries: 0,
+        _phantom: std::marker::PhantomData::<UserDb>,
     };
     let mut conn = stash.connection().await.unwrap();
     let mut draft_metadata = DraftMetadata::builder()

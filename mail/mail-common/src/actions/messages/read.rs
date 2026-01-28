@@ -11,6 +11,7 @@ use proton_core_api::session::Session;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::{error, info};
 
@@ -27,7 +28,7 @@ impl Read {
     }
 }
 
-impl Action for Read {
+impl Action<UserDb> for Read {
     const TYPE: Type = Type("mark_messages_read");
     const VERSION: u32 = 1;
 
@@ -46,7 +47,7 @@ pub struct ReadHandler {
     pub api: Session,
 }
 
-impl Handler for ReadHandler {
+impl Handler<UserDb> for ReadHandler {
     type Action = Read;
 
     async fn apply_local(
@@ -54,7 +55,7 @@ impl Handler for ReadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action
             .0
             .apply_changes_sync(tx, |id, tx| Message::mark_read_or_unread(true, &[id], tx))
@@ -67,7 +68,7 @@ impl Handler for ReadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::mark_unread_async(action.0.target_ids_with_modifications(), tx).await?;
         Ok(())
     }
@@ -76,8 +77,11 @@ impl Handler for ReadHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         // API call return an error 2501(Message does not exist) for message already
         // read, so we only pass to apply_remote the things that were unread.
         let message_ids = action.0.resolve_ids(guard.tether()).await?;
@@ -98,7 +102,7 @@ impl Handler for ReadHandler {
             error!("Read messages operation failed for: {failed_ids:?}");
 
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     GenericActionData::<Message>::mark_rollback(
                         &failed_ids,
                         RollbackItemType::Message,
@@ -124,7 +128,7 @@ impl Handler for ReadHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action
             .0
             .rebase_changes_sync(changeset, tx, |id, _, tx| {

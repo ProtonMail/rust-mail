@@ -5,6 +5,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::queue::{ActionError, Error, QueuedError};
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::tests::common::TestDb;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -285,7 +286,7 @@ pub struct CancelAction {
     pub value: u32,
 }
 
-impl Action for CancelAction {
+impl Action<TestDb> for CancelAction {
     const TYPE: Type = Type("revert");
     const VERSION: u32 = 1;
 
@@ -299,15 +300,15 @@ impl Action for CancelAction {
 #[derive(Default)]
 pub struct CancelActionHandler;
 
-impl Handler for CancelActionHandler {
+impl Handler<TestDb> for CancelActionHandler {
     type Action = CancelAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
     }
 
@@ -315,8 +316,8 @@ impl Handler for CancelActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx.ext_delete_value(&action.key).await?)
     }
 
@@ -324,8 +325,11 @@ impl Handler for CancelActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         panic!("should not be called");
     }
     async fn rebase_local(
@@ -333,8 +337,8 @@ impl Handler for CancelActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }
@@ -346,7 +350,7 @@ pub struct ChainCancelAction {
     old_value: u32,
 }
 
-impl Action for ChainCancelAction {
+impl Action<TestDb> for ChainCancelAction {
     const TYPE: Type = Type("chain_revert");
     const VERSION: u32 = 1;
 
@@ -360,15 +364,15 @@ impl Action for ChainCancelAction {
 #[derive(Default)]
 pub struct ChainCancelActionHandler;
 
-impl Handler for ChainCancelActionHandler {
+impl Handler<TestDb> for ChainCancelActionHandler {
     type Action = ChainCancelAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         let old_value = tx.ext_get_value(&action.key).await?.unwrap();
         action.old_value = old_value;
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
@@ -378,8 +382,8 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx.ext_insert_value(&action.key, action.old_value).await?)
     }
 
@@ -387,8 +391,11 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         panic!("should not be called");
     }
     async fn rebase_local(
@@ -396,8 +403,8 @@ impl Handler for ChainCancelActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

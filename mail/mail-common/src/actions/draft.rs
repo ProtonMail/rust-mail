@@ -23,6 +23,7 @@ use proton_action_queue::action::{ActionGroup, WriterGuard, WriterGuardError};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::error;
@@ -103,7 +104,7 @@ async fn save_attachment_error(
     message_id: LocalMessageId,
     attachment_id: LocalAttachmentId,
     origin: DraftSendResultOrigin,
-    writer_guard: &mut WriterGuard<'_>,
+    writer_guard: &mut WriterGuard<'_, UserDb>,
     error: &MailContextError,
 ) -> Result<(), WriterGuardError> {
     writer_guard

@@ -23,8 +23,8 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::NewAttachmentParams;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, Tether};
+use stash::{UserDb, params};
 use std::sync::Weak;
 use std::time::Duration;
 use tokio::time;
@@ -88,7 +88,7 @@ impl AttachmentUpload {
     }
 }
 
-impl Action for AttachmentUpload {
+impl Action<UserDb> for AttachmentUpload {
     const TYPE: Type = Type("attachment_upload");
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
     const VERSION: u32 = 2;
@@ -103,7 +103,7 @@ impl Action for AttachmentUpload {
 
 pub struct AttachmentUploadVersionConverter {}
 
-impl VersionConverter for AttachmentUploadVersionConverter {
+impl VersionConverter<UserDb> for AttachmentUploadVersionConverter {
     type Output = AttachmentUpload;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -119,7 +119,7 @@ pub struct AttachmentUploadHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for AttachmentUploadHandler {
+impl Handler<UserDb> for AttachmentUploadHandler {
     type Action = AttachmentUpload;
 
     async fn apply_local(
@@ -127,7 +127,10 @@ impl Handler for AttachmentUploadHandler {
         this_id: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         // Even though we check this before queuing, when running in a tx scope
         // we have the final source of truth. The previous check can happen in parallel
         // and can miss certain cases.
@@ -235,7 +238,7 @@ impl Handler for AttachmentUploadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         if let Some(message_id) = action.local_message_id {
             // remove attachment from message.
             tx.execute(
@@ -258,8 +261,11 @@ impl Handler for AttachmentUploadHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut writer_guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut writer_guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
 
         let r = action
@@ -295,7 +301,7 @@ impl Handler for AttachmentUploadHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }
@@ -304,8 +310,8 @@ impl AttachmentUpload {
     async fn apply_remote_impl(
         &self,
         ctx: &MailUserContext,
-        writer_guard: &mut WriterGuard<'_>,
-    ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
+        writer_guard: &mut WriterGuard<'_, UserDb>,
+    ) -> Result<<Self as Action<UserDb>>::RemoteOutput, <Self as Action<UserDb>>::Error> {
         let local_message_id = self.local_message_id(writer_guard.tether()).await?;
 
         let Some(remote_message_id) =
@@ -352,7 +358,7 @@ async fn encrypt_and_upload_attachment(
     local_message_id: LocalMessageId,
     message_id: &MessageId,
     attachment: &mut Attachment,
-    writer_guard: &mut WriterGuard<'_>,
+    writer_guard: &mut WriterGuard<'_, UserDb>,
     new_disposition: Option<CombinedAttachmentDisposition>,
 ) -> Result<(), MailContextError> {
     let new_attachment_disposition = if let Some(new_disposition) = new_disposition {

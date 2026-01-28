@@ -34,6 +34,7 @@ use proton_mail_common::models::{
 };
 use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
@@ -1088,7 +1089,7 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     };
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::Save>()
+        .as_action_error::<proton_mail_common::actions::draft::Save, UserDb>()
         .unwrap();
 
     assert!(matches!(

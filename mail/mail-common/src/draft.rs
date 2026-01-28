@@ -29,6 +29,7 @@ use recipients::{OnPrivacyLockUpdate, RecipientPrivacyLockUpdate};
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::exports::{FromSql, ToSql, ToSqlOutput};
 use std::fmt;
 use std::fmt::Formatter;
@@ -832,12 +833,12 @@ impl DraftActor {
         Ok(draft)
     }
 
-    pub async fn save(&self) -> Result<QueuedActionOutput<Save>, MailContextError> {
+    pub async fn save(&self) -> Result<QueuedActionOutput<Save, UserDb>, MailContextError> {
         self.act(|sender| DraftActorMessage::Save { sender })
             .await?
     }
 
-    pub async fn send(&self) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    pub async fn send(&self) -> Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError> {
         self.act(|sender| DraftActorMessage::Send { sender })
             .await?
     }
@@ -845,7 +846,7 @@ impl DraftActor {
     pub async fn schedule_send(
         &self,
         delivery_time: DateTime<Local>,
-    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    ) -> Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError> {
         self.act(|sender| DraftActorMessage::ScheduleSend {
             delivery_time,
             sender,
@@ -853,7 +854,7 @@ impl DraftActor {
         .await?
     }
 
-    pub async fn discard(&self) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+    pub async fn discard(&self) -> Result<QueuedActionOutput<Discard, UserDb>, MailContextError> {
         self.act(|sender| DraftActorMessage::Discard { sender })
             .await?
     }
@@ -1311,16 +1312,16 @@ impl DraftActor {
     pub async fn action_discard(
         message_id: LocalMessageId,
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+    ) -> Result<QueuedActionOutput<Discard, UserDb>, MailContextError> {
         draft_v1::Draft::action_discard(message_id, tether, queue, origin).await
     }
 
     pub async fn action_undo_send(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_id: LocalMessageId,
-    ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
+    ) -> Result<QueuedActionOutput<UndoSend, UserDb>, ActionError<UndoSend, UserDb>> {
         draft_v1::Draft::action_undo_send(queue, message_id).await
     }
 
@@ -1459,23 +1460,23 @@ enum DraftActorMessage {
 
     #[display("Discard")]
     Discard {
-        sender: oneshot::Sender<Result<QueuedActionOutput<Discard>, MailContextError>>,
+        sender: oneshot::Sender<Result<QueuedActionOutput<Discard, UserDb>, MailContextError>>,
     },
 
     #[display("ScheduleSend")]
     ScheduleSend {
         delivery_time: DateTime<Local>,
-        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError>>,
     },
 
     #[display("Send")]
     Send {
-        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send>, MailContextError>>,
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError>>,
     },
 
     #[display("Save")]
     Save {
-        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Save>, MailContextError>>,
+        sender: oneshot::Sender<Result<QueuedActionOutput<draft::Save, UserDb>, MailContextError>>,
     },
 
     #[display("SenderAddresses")]

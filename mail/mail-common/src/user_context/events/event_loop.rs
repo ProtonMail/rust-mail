@@ -7,6 +7,7 @@ use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::app_events::OnEnterForegroundEvent;
 use proton_core_common::services::InitializationService;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::RunTransaction;
 use std::time::Duration;
@@ -100,7 +101,7 @@ impl MailUserContext {
     ///
     /// If we are in automatic mode this is a noop.
     ///
-    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll, UserDb>> {
         // Delegate to UserContext
         self.user_context().poll_event_loop().await
     }
@@ -108,19 +109,21 @@ impl MailUserContext {
     /// Queue an action to execute the event loop as soon as possible regardless of
     /// the selected polling mode.
     ///
-    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll, UserDb>> {
         // Delegate to UserContext
         self.user_context().force_event_loop_poll().await?;
         Ok(())
     }
 
-    pub async fn force_event_loop_poll_and_wait(&self) -> Result<(), ActionError<EventPoll>> {
+    pub async fn force_event_loop_poll_and_wait(
+        &self,
+    ) -> Result<(), ActionError<EventPoll, UserDb>> {
         // Delegate to UserContext
         self.user_context().force_event_loop_poll_and_wait().await?;
         Ok(())
     }
 
-    async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
+    async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction, UserDb>> {
         // Only queue rollback if there is actually anything to rollback.
         let tether = self.user_stash().connection().await?;
         if RollbackItem::count("", vec![], &tether).await? == 0 {

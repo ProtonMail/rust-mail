@@ -45,6 +45,7 @@ use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
+use stash::UserDb;
 use stash::exports::SqliteError;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
@@ -787,10 +788,10 @@ impl Draft {
 
     pub async fn save(
         &mut self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Save>, MailContextError> {
+    ) -> Result<QueuedActionOutput<Save, UserDb>, MailContextError> {
         let r = self.to_save_action().queue(queue, tether, origin).await;
         if let Ok(output) = &r {
             self.last_draft_save_action_id = Some(output.id)
@@ -800,10 +801,10 @@ impl Draft {
 
     pub async fn send(
         &mut self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    ) -> Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError> {
         self.to_send_action()?
             .queue(queue, tether, origin, &mut self.last_draft_save_action_id)
             .await
@@ -816,10 +817,10 @@ impl Draft {
     pub async fn schedule_send(
         &mut self,
         delivery_time: DateTime<Local>,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    ) -> Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError> {
         self.to_schedule_send_action(delivery_time)?
             .queue(queue, tether, origin, &mut self.last_draft_save_action_id)
             .await
@@ -827,9 +828,9 @@ impl Draft {
 
     pub async fn discard(
         &self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+    ) -> Result<QueuedActionOutput<Discard, UserDb>, MailContextError> {
         Ok(self.to_discard_action().queue(queue, origin).await?)
     }
 
@@ -840,9 +841,9 @@ impl Draft {
     pub async fn action_discard(
         message_id: LocalMessageId,
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+    ) -> Result<QueuedActionOutput<Discard, UserDb>, MailContextError> {
         let Some(metadata) = DraftMetadata::find_by_message_id(message_id, tether).await? else {
             return Err(Error::Open(OpenError::MessageNotADraft(message_id)).into());
         };
@@ -929,9 +930,9 @@ impl Draft {
     }
 
     pub async fn action_undo_send(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         message_id: LocalMessageId,
-    ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
+    ) -> Result<QueuedActionOutput<UndoSend, UserDb>, ActionError<UndoSend, UserDb>> {
         queue.queue_action(UndoSend::new(message_id)).await
     }
 
@@ -1544,7 +1545,7 @@ impl Draft {
     async fn swap_attachment_disposition_impl(
         &self,
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         origin: Origin,
         attachment_id: LocalAttachmentId,
         new_attachment_disposition: CombinedAttachmentDisposition,
@@ -1617,10 +1618,10 @@ impl DraftSaveActionQueuer {
     #[tracing::instrument(name = "draft::save", skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Save>, MailContextError> {
+    ) -> Result<QueuedActionOutput<Save, UserDb>, MailContextError> {
         // find all attachments that need to be manually queued.
         let pending_attachment_ids =
             DraftAttachmentMetadata::pending_attachments(self.id, tether).await?;
@@ -1708,11 +1709,11 @@ impl DraftSendActionQueuer {
     #[tracing::instrument(name = "draft::send", skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
         last_draft_save_action_id: &mut Option<ActionId>,
-    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    ) -> Result<QueuedActionOutput<draft::Send, UserDb>, MailContextError> {
         let save_output = self.save_action.queue(queue, tether, origin).await?;
 
         *last_draft_save_action_id = Some(save_output.id);
@@ -1750,9 +1751,9 @@ impl DraftDiscardActionQueuer {
     #[tracing::instrument(name = "draft::discard", skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<Discard>, ActionError<Discard>> {
+    ) -> Result<QueuedActionOutput<Discard, UserDb>, ActionError<Discard, UserDb>> {
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail");
@@ -1799,11 +1800,11 @@ impl DraftAttachmentUploadQueuer {
     #[tracing::instrument(name = "draft::attachment_upload", skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
         last_draft_save_action_id: &mut Option<ActionId>,
-    ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
+    ) -> Result<QueuedActionOutput<AttachmentUpload, UserDb>, MailContextError> {
         let stats =
             DraftAttachmentMetadata::total_attachments_size_and_count(self.id, tether).await?;
         if stats.total_size >= Attachment::MAX_ATTACHMENT_SIZE {
@@ -1904,10 +1905,10 @@ impl DraftAttachmentRemovalQueuer {
     #[tracing::instrument(name = "draft::attachment_remove", skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         tether: &Tether,
         origin: Origin,
-    ) -> Result<QueuedActionOutput<AttachmentRemove>, MailContextError> {
+    ) -> Result<QueuedActionOutput<AttachmentRemove, UserDb>, MailContextError> {
         // Find existing attachment metadata.
         let attachment_metadata = match self.attachment_id {
             AttachmentRemovalId::Local(id) => {
@@ -1971,14 +1972,14 @@ pub fn draft_attachment_staging_path(
 }
 
 async fn queue_or_replace_draft_save(
-    queue: &Queue,
+    queue: &Queue<UserDb>,
     origin: Origin,
     save_action: Save,
     metadata_id: MetadataId,
     last_draft_save_action_id: Option<ActionId>,
     other_direct_dependencies: impl IntoIterator<Item = ActionId>,
     other_sequential_dependencies: impl IntoIterator<Item = ActionId>,
-) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
+) -> Result<QueuedActionOutput<Save, UserDb>, ActionError<Save, UserDb>> {
     let mut metadata = MetadataBuilder::new()
         .with_resource(&metadata_id)
         .expect("This should never fail");

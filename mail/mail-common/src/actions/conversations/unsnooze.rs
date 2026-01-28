@@ -13,9 +13,9 @@ use proton_mail_api::services::proton::ProtonMail;
 use serde::{self, Deserialize, Serialize};
 use stash::exports::ToSql;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::Bond;
 use stash::utils::placeholders;
+use stash::{UserDb, params};
 use tracing::error;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -33,7 +33,7 @@ impl Unsnooze {
     }
 }
 
-impl Action for Unsnooze {
+impl Action<UserDb> for Unsnooze {
     const TYPE: Type = Type("unsnooze_conversations");
     const VERSION: u32 = 1;
 
@@ -54,7 +54,7 @@ pub struct UnsnoozeHandler {
     pub api: Session,
 }
 
-impl Handler for UnsnoozeHandler {
+impl Handler<UserDb> for UnsnoozeHandler {
     type Action = Unsnooze;
 
     async fn apply_local(
@@ -62,7 +62,10 @@ impl Handler for UnsnoozeHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         if action.action_data.data.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
         }
@@ -108,7 +111,7 @@ impl Handler for UnsnoozeHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         for (conv_id, snoozed_until) in action.conv_snooze_time.iter() {
             // we don't want to validate the previous snoozed state.
             Conversation::snooze_unchecked(&[*conv_id], *snoozed_until, tx).await?;
@@ -133,8 +136,11 @@ impl Handler for UnsnoozeHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let (_, remote_target_ids) = action
             .action_data
             .resolve_ids_legacy(guard.tether())
@@ -157,7 +163,7 @@ impl Handler for UnsnoozeHandler {
 
         if !responses.is_empty() {
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     error!("Unsnooze operation failed for: {:?}", responses);
 
                     for remote_id in responses {
@@ -180,7 +186,7 @@ impl Handler for UnsnoozeHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         for id in &action.action_data.data.target_ids {
             let rebase_key: RebaseKey = (*id).into();
 

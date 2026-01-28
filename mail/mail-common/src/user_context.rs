@@ -89,8 +89,8 @@ const FF_BLACK_FRIDAY_WAVE2: &str = "MailBlackFriday2025Wave2";
 
 /// App origin only
 pub struct DefaultQueueExecutor {
-    pub default: QueueAutoExecutorPool,
-    pub prefetch_rollback: QueueAutoExecutorPool,
+    pub default: QueueAutoExecutorPool<UserDb>,
+    pub prefetch_rollback: QueueAutoExecutorPool<UserDb>,
 }
 
 impl DefaultQueueExecutor {
@@ -120,7 +120,7 @@ impl DefaultQueueExecutor {
 
 /// Used by both App and ShareExt origins
 pub struct SendQueueExecutorPool {
-    pub pool: QueueAutoExecutorPool,
+    pub pool: QueueAutoExecutorPool<UserDb>,
 }
 
 impl SendQueueExecutorPool {
@@ -514,7 +514,7 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    pub fn action_queue(&self) -> &Queue {
+    pub fn action_queue(&self) -> &Queue<UserDb> {
         self.user_context.queue()
     }
 

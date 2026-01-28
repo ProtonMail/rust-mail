@@ -4,20 +4,22 @@ pub mod event_poll;
 pub mod user_feature_flags;
 
 use crate::{Origin, UserContext};
-use proton_action_queue::action::{FactoryError, Handler};
+use proton_action_queue::action::{Action, FactoryError, Handler};
 use proton_action_queue::queue::Queue;
 use proton_core_api::session::Session;
+use stash::UserDb;
 use std::sync::Weak;
 
 pub(crate) fn register_actions(
     origin: Origin,
-    queue: &Queue,
+    queue: &Queue<UserDb>,
     ctx: &Weak<UserContext>,
     api: &Session,
 ) {
-    fn reg<T>(queue: &Queue, handler: T)
+    fn reg<T>(queue: &Queue<UserDb>, handler: T)
     where
-        T: Handler,
+        T: Handler<UserDb>,
+        T::Action: Action<UserDb, Handler = T>,
     {
         if let Err(e) = queue.register::<T::Action>(handler) {
             match e {

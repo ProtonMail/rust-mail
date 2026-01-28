@@ -14,6 +14,7 @@ use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 
@@ -33,7 +34,7 @@ impl Unblock {
     }
 }
 
-impl Action for Unblock {
+impl Action<UserDb> for Unblock {
     const TYPE: Type = Type("unblock");
     const VERSION: u32 = 1;
 
@@ -54,7 +55,7 @@ pub struct UnblockHandler {
     pub api: Session,
 }
 
-impl Handler for UnblockHandler {
+impl Handler<UserDb> for UnblockHandler {
     type Action = Unblock;
 
     async fn apply_local(
@@ -62,7 +63,7 @@ impl Handler for UnblockHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         tracing::info!("Unblocking {}", action.email);
 
         let Some(mut incoming) =
@@ -94,7 +95,7 @@ impl Handler for UnblockHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         tracing::info!("Restoring block for {}", action.email);
 
         let Some(incoming_id) = action.removed else {
@@ -115,8 +116,11 @@ impl Handler for UnblockHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         tracing::info!("Unblocking {}", action.email);
 
         let Some(local_removed_id) = action.removed else {
@@ -134,7 +138,7 @@ impl Handler for UnblockHandler {
         }
 
         guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+            .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                 incoming.delete(tx).await?;
                 Ok(())
             })
@@ -149,7 +153,7 @@ impl Handler for UnblockHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

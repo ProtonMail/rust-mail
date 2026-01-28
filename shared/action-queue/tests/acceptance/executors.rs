@@ -7,7 +7,7 @@ use proton_action_queue::queue::{
     QueueAutoTerminationPolicy, TokioTaskSpawner,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
-use proton_action_queue::tests::common::DefaultError;
+use proton_action_queue::tests::common::{DefaultError, TestDb};
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -207,7 +207,7 @@ struct TestAction {
     fail_network: bool,
 }
 
-impl Action for TestAction {
+impl Action<TestDb> for TestAction {
     const TYPE: Type = Type("TEST_ACTION");
     const VERSION: u32 = 1;
 
@@ -221,15 +221,15 @@ impl Action for TestAction {
 #[derive(Default)]
 struct TestHandler;
 
-impl Handler for TestHandler {
+impl Handler<TestDb> for TestHandler {
     type Action = TestAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 
@@ -237,8 +237,8 @@ impl Handler for TestHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         // do nothing
         Ok(())
     }
@@ -247,8 +247,11 @@ impl Handler for TestHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         if action.fail_network {
             return Err(DefaultError::NetworkFailure);
         }
@@ -259,8 +262,8 @@ impl Handler for TestHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }
