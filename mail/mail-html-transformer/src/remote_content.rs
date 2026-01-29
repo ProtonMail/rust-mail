@@ -5,8 +5,11 @@
 mod tests;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
+use html5ever::LocalName;
 use html5ever::namespace_url;
 use html5ever::ns;
+use kuchikiki::Attributes;
+use kuchikiki::ExpandedName;
 use kuchikiki::NodeData;
 use kuchikiki::iter::NodeEdge;
 use kuchikiki::{Attribute, NodeRef};
@@ -14,9 +17,40 @@ use lightningcss::printer::PrinterOptions;
 use lightningcss::properties::custom::Function;
 use lightningcss::values::url::Url;
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
+use std::cell::RefMut;
 use std::collections::HashSet;
 use std::convert::Infallible;
+use std::sync::LazyLock;
 use tracing::warn;
+use velcro::hash_set;
+
+static ATTRIBUTES_TO_CHECK: LazyLock<HashSet<ExpandedName>> = LazyLock::new(|| {
+    hash_set![
+        crate::utils::attribute_name("url"),
+        crate::utils::attribute_name("src"),
+        crate::utils::attribute_name("srcset"),
+        crate::utils::attribute_name("svg"),
+        crate::utils::attribute_name("background"),
+        crate::utils::attribute_name("poster"),
+        crate::utils::attribute_name("data-src"),
+        crate::utils::attribute_name("href"),
+        crate::utils::attribute_name("action"),
+        crate::utils::attribute_name("formaction"),
+        crate::utils::attribute_name("cite"),
+        crate::utils::attribute_name_ex(ns!(xlink), "href"),
+    ]
+});
+
+static LINK_LIKE_TAGS: LazyLock<HashSet<LocalName>> = LazyLock::new(|| {
+    hash_set![
+        LocalName::from("a"),
+        LocalName::from("area"),
+        LocalName::from("base"),
+    ]
+});
+
+static STYLE_ATTR: LazyLock<ExpandedName> = LazyLock::new(|| crate::utils::attribute_name("style"));
+static STYLE_NODE: LazyLock<LocalName> = LazyLock::new(|| LocalName::from("style"));
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -38,23 +72,6 @@ pub fn remote_content(
     let mut remote_urls = HashSet::new();
     let mut embedded_urls = HashSet::new();
 
-    let style_attribute = crate::utils::attribute_name("style");
-
-    let attrs = [
-        crate::utils::attribute_name("url"),
-        crate::utils::attribute_name("src"),
-        crate::utils::attribute_name("srcset"),
-        crate::utils::attribute_name("svg"),
-        crate::utils::attribute_name("background"),
-        crate::utils::attribute_name("poster"),
-        crate::utils::attribute_name("data-src"),
-        crate::utils::attribute_name("href"),
-        crate::utils::attribute_name("action"),
-        crate::utils::attribute_name("formaction"),
-        crate::utils::attribute_name("cite"),
-        crate::utils::attribute_name_ex(ns!(xlink), "href"),
-    ];
-
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
@@ -67,7 +84,7 @@ pub fn remote_content(
             continue;
         };
 
-        if element.name.local.as_ref() == "style" {
+        if element.name.local == *STYLE_NODE {
             node_ref.children().for_each(|child| {
                 if let NodeData::Text(text) = child.data() {
                     let out =
@@ -78,40 +95,20 @@ pub fn remote_content(
             });
         }
 
-        // These do not contain remote content.
-        if hide_remote && ["a", "base", "area"].contains(&element.name.local.as_ref()) {
-            continue;
-        }
-
         let mut attributes = element.attributes.borrow_mut();
 
-        for item in &attrs {
-            let Some(attr) = attributes.map.get_mut(item) else {
-                continue;
-            };
-
-            match is_embedded_url(attr) {
-                Ok(true) => {
-                    embedded_urls.insert(attr.value.clone());
-                    if hide_embedded {
-                        attr.value = String::new();
-                    }
-                }
-                Ok(false) => {
-                    remote_urls.insert(attr.value.clone());
-                    if hide_remote {
-                        attr.value = String::new();
-                    }
-                }
-                Err(_) => {
-                    remote_urls.insert(attr.value.clone());
-                    attr.value = String::new();
-                }
-            }
+        if !LINK_LIKE_TAGS.contains(&element.name.local) {
+            check_for_remote_content_in_attributes(
+                &mut attributes,
+                &mut remote_urls,
+                &mut embedded_urls,
+                hide_embedded,
+                hide_remote,
+            );
         }
 
         // Check css styles
-        if let Some(attr) = attributes.map.get_mut(&style_attribute) {
+        if let Some(attr) = attributes.map.get_mut(&*STYLE_ATTR) {
             let out = handle_style_attribute(&mut attr.value, hide_remote, hide_embedded);
             remote_urls.extend(out.remote_urls);
             embedded_urls.extend(out.embedded_urls);
@@ -121,6 +118,39 @@ pub fn remote_content(
     RemoteContentOutput {
         remote_urls,
         embedded_urls,
+    }
+}
+
+fn check_for_remote_content_in_attributes(
+    attributes: &mut RefMut<'_, Attributes>,
+    remote_urls: &mut HashSet<String>,
+    embedded_urls: &mut HashSet<String>,
+    hide_embedded: bool,
+    hide_remote: bool,
+) {
+    for item in ATTRIBUTES_TO_CHECK.iter() {
+        let Some(attr) = attributes.map.get_mut(item) else {
+            continue;
+        };
+
+        match is_embedded_url(attr) {
+            Ok(true) => {
+                embedded_urls.insert(attr.value.clone());
+                if hide_embedded {
+                    attr.value = String::new();
+                }
+            }
+            Ok(false) => {
+                remote_urls.insert(attr.value.clone());
+                if hide_remote {
+                    attr.value = String::new();
+                }
+            }
+            Err(_) => {
+                remote_urls.insert(attr.value.clone());
+                attr.value = String::new();
+            }
+        }
     }
 }
 
