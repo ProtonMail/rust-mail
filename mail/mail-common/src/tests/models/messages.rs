@@ -89,12 +89,14 @@ mod available_label_as_actions {
                 label_id: 0.into(),
                 name: "label1".into(),
                 color: LabelColor::purple(),
+                order: Default::default(),
                 is_selected: Some( false )
             },
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label2".into(),
                 color: Default::default(),
+                order: Default::default(),
                 is_selected: Some( false )
             }
         ]); "TEST2: messages without labels")]
@@ -115,12 +117,14 @@ mod available_label_as_actions {
                 label_id: 0.into(),
                 name: "label1".into(),
                 color: LabelColor::purple(),
+                order: Default::default(),
                 is_selected: Some( true )
             },
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label2".into(),
                 color: Default::default(),
+                order: Default::default(),
                 is_selected: Some( true )
             }
         ]); "TEST3: messages with all labels")]
@@ -139,12 +143,14 @@ mod available_label_as_actions {
                 label_id: 0.into(),
                 name: "label1".into(),
                 color: LabelColor::purple(),
+                order: Default::default(),
                 is_selected: None,
             },
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label2".into(),
                 color: Default::default(),
+                order: Default::default(),
                 is_selected: None,
             }
         ]); "TEST4: each message with different label")]

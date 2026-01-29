@@ -17,6 +17,7 @@ macro_rules! lid {
         label_id: 0.into(),
         name: Default::default(),
         color: Default::default(),
+        order: Default::default(),
         is_selected: Some(false)
     }
 ]; "TEST2: single label, not selected")]
@@ -25,6 +26,7 @@ macro_rules! lid {
         label_id: 0.into(),
         name: Default::default(),
         color: Default::default(),
+        order: Default::default(),
         is_selected: Some(true)
     }
 ]; "TEST3: single label, selected")]
@@ -35,6 +37,7 @@ macro_rules! lid {
         label_id: 0.into(),
         name: Default::default(),
         color: Default::default(),
+        order: Default::default(),
         is_selected: Some(true),
 }]; "TEST4: all selected")]
 #[test_case(
@@ -44,6 +47,7 @@ macro_rules! lid {
             label_id: 0.into(),
             name: Default::default(),
             color: Default::default(),
+            order: Default::default(),
             is_selected: Some(false),
 }]; "TEST5: none selected")]
 #[test_case(
@@ -55,6 +59,7 @@ macro_rules! lid {
         label_id: 0.into(),
         name: "name".into(),
         color: Default::default(),
+        order: Default::default(),
         is_selected: None,
 }]; "TEST6: partially selected")]
 pub fn test_is_selected(
