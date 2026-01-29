@@ -19,8 +19,12 @@ $OUT_DIR/jniLibs/arm64-v8a \
 $OUT_DIR/jniLibs/armeabi-v7a \
 $OUT_DIR/jniLibs/x86_64 \
 
+# Optional features to enable
+# - foundation_search: local body text search indexing
+FEATURES="${CARGO_FEATURES:-foundation_search}"
+
 # Build project
-cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --profile $PROFILE -p $TARGET
+cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --profile $PROFILE -p $TARGET --features "$FEATURES"
 
 # Generate bindings
 cargo run \

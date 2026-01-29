@@ -532,6 +532,9 @@ pub async fn scroller_search(
             MailScroller::search(context.as_weak(), options.into(), 50).await?;
 
         let handle = spawn_message_scroller_watcher(&context, handle, callback);
+        #[cfg(feature = "foundation_search")]
+        let scroller = SearchScroller::new(scroller, handle, context);
+        #[cfg(not(feature = "foundation_search"))]
         let scroller = SearchScroller::new(scroller, handle);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(scroller))

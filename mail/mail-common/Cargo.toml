@@ -26,6 +26,13 @@ sql = [
 ]
 proton_mail_error_log = []
 events-v6 = ["proton-core-common/events-v6"]
+# Foundation Search: Local body text search indexing
+# When enabled, message bodies are indexed locally for offline full-text search.
+foundation_search = [
+  "dep:proton-foundation-search",
+  "dep:proton-mail-search",
+  "proton-mail-search/foundation_search",
+]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -39,6 +46,7 @@ derivative = { workspace = true }
 email_address = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
 file-format = { workspace = true }
 flume = { workspace = true }
@@ -60,6 +68,8 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
+proton-foundation-search = { workspace = true, optional = true }
+proton-mail-search = { workspace = true, optional = true }
 proton-mail-html-transformer = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-task-service = { workspace = true }

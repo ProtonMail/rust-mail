@@ -92,7 +92,7 @@ impl SearchScrollerSource {
         })
     }
 
-    async fn spawn_first_page_sync(
+    pub(crate) async fn spawn_first_page_sync(
         ctx: &MailUserContext,
         total: Arc<Mutex<u64>>,
         remote_label_id: LabelId,
@@ -122,7 +122,7 @@ impl SearchScrollerSource {
         Ok(Some(task))
     }
 
-    async fn spawn_background_sync(
+    pub(crate) async fn spawn_background_sync(
         ctx: &MailUserContext,
         remote_label_id: LabelId,
         search: SearchOptions,
@@ -286,7 +286,6 @@ impl SearchScrollerSource {
                     tx,
                 )
                 .await?;
-                // Save all messages.
                 for message in messages.iter_mut() {
                     SearchScrollData::builder()
                         .local_message_id(message.id())

@@ -18,12 +18,13 @@ mod migration_snooper;
 pub mod models;
 mod prefetch;
 mod rsvp;
+pub mod search;
 mod send_queries;
 mod sidebar;
-mod snooze;
+pub mod snooze;
 mod tracker_service;
-mod traits;
-mod upsell_eligibility_watcher;
+pub mod traits;
+pub mod upsell_eligibility_watcher;
 mod user_context;
 
 #[cfg(feature = "test-utils")]

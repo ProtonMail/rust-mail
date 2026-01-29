@@ -4,10 +4,11 @@ use crate::actions::{
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Conversation, Message};
+#[cfg(feature = "foundation_search")]
+use crate::search::MailSearchService;
 use proton_action_queue::action::{
-    Action, ActionDependencyKeys, DefaultVersionConverter, Type, WriterGuard,
+    Action, ActionDependencyKeys, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::action::{ActionId, Handler};
 use proton_action_queue::rebase::{RebaseChangeSet, RebaseKey};
 use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
@@ -65,6 +66,12 @@ impl Handler<UserDb> for DeleteHandler {
         }
 
         Message::mark_deleted(action.0.data.target_ids.clone(), tx).await?;
+
+        // We only remove from the index in apply_remote after permanent deletion succeeds.
+        // This handler is only used for PERMANENT deletion (e.g., "Empty Trash", "Delete Permanently").
+        // When users swipe to trash/archive, that uses MoveHandler, not DeleteHandler, so messages
+        // in trash/archive remain searchable.
+
         Ok(())
     }
 
@@ -74,7 +81,13 @@ impl Handler<UserDb> for DeleteHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
-        Message::mark_undeleted(action.0.data.target_ids.clone(), tx).await?;
+        let message_ids = action.0.data.target_ids.clone();
+        Message::mark_undeleted(message_ids, tx).await?;
+
+        // Note: No need to re-index on undelete. Message content hasn't changed.
+        // If a pending "remove" intent exists, it will be a no-op (document already gone
+        // or still present). The message will be re-indexed if its body is accessed again.
+
         Ok(())
     }
 
@@ -98,7 +111,7 @@ impl Handler<UserDb> for DeleteHandler {
         let failed_ids = if remote_target_ids.is_empty() {
             vec![]
         } else {
-            let message_ids = remote_target_ids;
+            let message_ids = remote_target_ids.clone();
 
             info!("Deleting {message_ids:?}");
 
@@ -110,6 +123,12 @@ impl Handler<UserDb> for DeleteHandler {
 
             filter_responses(response)
         };
+
+        // Track which local-only messages were permanently deleted (for search removal)
+        // Note: Messages with remote_id will be handled by the event subscriber when
+        // the delete event is processed, so we don't need to queue search removal for them here.
+        #[cfg(feature = "foundation_search")]
+        let mut permanently_deleted_ids = Vec::new();
 
         if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             error!("Delete messages operation failed for: {failed_ids:?}");
@@ -160,11 +179,35 @@ impl Handler<UserDb> for DeleteHandler {
                         Message::delete_by_id(id, tx)
                             .await
                             .inspect_err(|e| error!("Failed to delete message: {e:?}"))?;
+
+                        // Track for search removal (feature-gated)
+                        #[cfg(feature = "foundation_search")]
+                        {
+                        permanently_deleted_ids.push(id);
+                        }
                     }
+
                     Ok(())
                 }
             ).await?;
         }
+
+        // Queue search removal intents for all permanently deleted messages
+        #[cfg(feature = "foundation_search")]
+        if !permanently_deleted_ids.is_empty() {
+            guard
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
+                    for id in &permanently_deleted_ids {
+                        if let Err(e) = MailSearchService::queue_remove(id.as_u64(), tx).await {
+                            error!("Failed to queue search removal for message {}: {:?}", id, e);
+                            // Continue with other messages even if one fails
+                        }
+                    }
+                    Ok(())
+                })
+                .await?;
+        }
+
         Ok(())
     }
     async fn rebase_local(

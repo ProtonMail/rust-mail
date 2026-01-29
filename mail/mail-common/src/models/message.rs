@@ -1051,10 +1051,15 @@ impl Message {
         )
         .await?
         {
-            debug!("Found message body in cache.");
+            debug!("Found message body in cache for message {}", self.id());
+            // Note: Search index intent should have been queued when the body was first stored
+            // (in RawMessageBody::store_and_consume). No need to re-queue on every cache load.
             return Ok(decrypted);
         }
-        debug!("Message body not in cache. Fetching...");
+        debug!(
+            "Message body not in cache for message {}, fetching...",
+            self.id()
+        );
 
         let Some(remote_id) = self.remote_id.clone() else {
             return Err(AppError::MessageHasNoRemoteId(self.id()).into());
@@ -1082,7 +1087,11 @@ impl Message {
         )
         .await?;
 
-        info!("Message successfully synced.");
+        trace!("Message successfully decrypted. Caching...");
+        // Note: The raw body is already stored by decrypt_and_store() called in decrypt_message_body()
+        // No need to store the processed body separately
+
+        tracing::info!("Message {} successfully synced and stored", self.id());
         Ok(decrypted)
     }
 
@@ -2029,6 +2038,22 @@ impl Message {
 
         match action {
             Action::Delete => {
+                // Handle search indexing removal before deleting the message
+                #[cfg(feature = "foundation_search")]
+                {
+                    use crate::user_context::events::search::handle_search_indexing_for_message;
+                    if let Err(e) = handle_search_indexing_for_message(
+                        tx, id, action, None, // Will look up local_id if needed
+                    )
+                    .await
+                    {
+                        warn!(
+                            "Failed to handle search indexing removal for message {}: {}",
+                            id, e
+                        );
+                    }
+                }
+
                 tx.execute(
                     "DELETE FROM messages WHERE remote_id = ?",
                     params![id.clone()],
@@ -2060,6 +2085,23 @@ impl Message {
 
                 tracing::info!("Created with {:?}", message.id());
                 changeset.add(message.id());
+
+                // Handle search indexing for newly created message
+                #[cfg(feature = "foundation_search")]
+                {
+                    use crate::user_context::events::search::handle_search_indexing_for_message;
+                    if let Err(e) = handle_search_indexing_for_message(
+                        tx,
+                        id,
+                        action,
+                        Some(message.id().as_u64()),
+                    )
+                    .await
+                    {
+                        warn!("Failed to handle search indexing for message {}: {}", id, e);
+                    }
+                }
+
                 Ok(Some(message.id()))
             }
 
@@ -2079,6 +2121,23 @@ impl Message {
                 message.prune_unresolved_labels(unresolved_label_ids);
                 Message::save(&mut message, tx).await?;
                 changeset.add(message.id());
+
+                // Handle search indexing for updated message
+                #[cfg(feature = "foundation_search")]
+                {
+                    use crate::user_context::events::search::handle_search_indexing_for_message;
+                    if let Err(e) = handle_search_indexing_for_message(
+                        tx,
+                        id,
+                        action,
+                        Some(message.id().as_u64()),
+                    )
+                    .await
+                    {
+                        warn!("Failed to handle search indexing for message {}: {}", id, e);
+                    }
+                }
+
                 Ok(None)
             }
         }

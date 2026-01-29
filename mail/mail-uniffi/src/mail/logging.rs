@@ -34,6 +34,21 @@ pub(super) fn init_log(log_service: &LogService, debug: bool) -> std::io::Result
 
     let registry = tracing_subscriber::registry().with(file_subscriber);
 
+    // Add stdout logging for iOS so logs appear in Xcode console
+    // Enabled via "stdout_logging" feature flag (works in both debug and release builds)
+    #[cfg(all(target_os = "ios", feature = "stdout_logging"))]
+    let registry = {
+        let stdout_subscriber = tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(false)
+            .with_filter(if debug {
+                app_tracing_env_filter_trace()
+            } else {
+                app_tracing_env_filter_default()
+            });
+        registry.with(stdout_subscriber)
+    };
+
     // TODO: Reintroduce tracing-oslog when this issue is resolved:
     //  https://github.com/Absolucy/tracing-oslog/issues/20
     // #[cfg(target_os = "ios", debug_assertions)]

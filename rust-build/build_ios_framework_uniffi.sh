@@ -187,12 +187,17 @@ check_exit
 TMP_DIR=$(readlink -f "$TMP_DIR")
 check_exit
 
-echo "Building aarch64 Sim"
-IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios-sim
+# Optional features to enable
+# - foundation_search: local body text search indexing
+# - stdout_logging: logs appear in Xcode console (iOS only)
+FEATURES="${CARGO_FEATURES:-foundation_search,stdout_logging}"
+
+echo "Building aarch64 Sim (features: $FEATURES)"
+IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios-sim --features "$FEATURES"
 check_exit
 
-echo "Building aarch64"
-IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios
+echo "Building aarch64 (features: $FEATURES)"
+IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --profile $PROFILE -p $TARGET --target aarch64-apple-ios --features "$FEATURES"
 check_exit
 
 mkdir -p "$TMP_DIR/ios-sim" "$TMP_DIR/ios-sim-swift-x86_64" "$TMP_DIR/ios-sim-swift-aarch64"

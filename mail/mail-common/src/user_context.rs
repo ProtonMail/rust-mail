@@ -16,6 +16,8 @@ use crate::events::v6;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchService};
 use crate::rsvp::RsvpService;
+#[cfg(feature = "foundation_search")]
+use crate::search::MailSearchService;
 use crate::upsell_eligibility_watcher::UpsellEligibilityWatcher;
 use crate::user_context::events::event_source::MailEventSourceV5;
 use crate::{
@@ -313,7 +315,7 @@ impl MailUserContext {
             let span =
                 tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
 
-            let origin = mail_context.core_context().origin();
+        let origin = mail_context.core_context().origin();
 
             let mut builder =
                 MailUserContextBuilder::new()
@@ -321,6 +323,28 @@ impl MailUserContext {
                     .with_service(EventSubscriberList::default())
                     .with_cyclic_service(ImageLoader::new)
                     .with_cyclic_service(TrackerService::new);
+
+            // Initialize Foundation Search service with Stash connection pool
+            // Extract TaskService from the context to ensure proper lifecycle management.
+            // The TaskService is extracted from BackgroundAwareTaskService which wraps it.
+            #[cfg(feature = "foundation_search")]
+            {
+                // Get Arc<TaskService> from BackgroundAwareTaskService
+                let task_service = mail_context.core_context().task_service().task_service_arc();
+
+                let search_service = MailSearchService::new(
+                    user_context.stash().clone(),
+                    task_service,
+                )
+                .await
+                .map_err(|e| {
+                    MailContextError::Other(anyhow::anyhow!(
+                        "Failed to initialize Foundation Search service: {}",
+                        e
+                    ))
+                })?;
+                builder = builder.with_service(search_service);
+            }
 
             builder = match origin {
                 Origin::App => {
@@ -403,6 +427,8 @@ impl MailUserContext {
                 Origin::App => {
                     DraftStagingAreaCleaner::new().run(&this)?;
                     this.init_expiration_loop();
+                    #[cfg(feature = "foundation_search")]
+                    this.init_search_worker();
                     this.register_subscribers().await?;
                     online_migrations::run(&this).await?;
 
@@ -510,6 +536,43 @@ impl MailUserContext {
         });
     }
 
+    /// Starts the search index worker that processes pending index intents.
+    ///
+    /// The worker runs in the background and:
+    /// - Polls for pending `SearchIndexIntent` records
+    /// - Executes indexing/removal operations via `MailSearchService`
+    /// - Handles retries with exponential backoff
+    /// - Runs cleanup when the intent queue is empty (idempotent)
+    ///
+    /// If the worker fails to start, it reports the error to Sentry as a critical issue.
+    #[cfg(feature = "foundation_search")]
+    fn init_search_worker(&self) {
+        use crate::search::StashMessageDataProvider;
+
+        let search_service = self.search_service().clone();
+        let data_provider = Arc::new(StashMessageDataProvider::new(self.user_stash().clone()));
+        let ctx_weak = self.this.clone();
+
+        self.spawn(async move {
+            match search_service.create_worker(data_provider).await {
+                Ok(worker) => {
+                    worker.run().await;
+                }
+                Err(e) => {
+                    error!("Failed to create search index worker: {}", e);
+                    // Report to Sentry as critical issue - search functionality is broken
+                    if let Some(ctx) = ctx_weak.upgrade() {
+                        ctx.issue_reporter_service().report(
+                            IssueLevel::Critical,
+                            format!("Failed to create search index worker: {e}"),
+                            issue_report_keys_from_error(&e),
+                        );
+                    }
+                }
+            }
+        });
+    }
+
     pub fn session(&self) -> &Session {
         self.user_context.session()
     }
@@ -543,6 +606,14 @@ impl MailUserContext {
         self.user_context.get_service::<UserMetricService>()
     }
 
+    /// Access the Foundation Search service for local email indexing and search
+    #[cfg(feature = "foundation_search")]
+    pub fn search_service(&self) -> &MailSearchService {
+        self.get_service::<MailSearchService>()
+    }
+
+    /// Get `MailUserContext` for each logged in account.
+    ///
     pub async fn all_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
         self.mail_context.get_all_logged_in_user_ctx().await
     }

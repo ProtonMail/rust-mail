@@ -18,8 +18,7 @@ mod acceptance {
     mod draft_send;
     mod draft_undo_send;
     mod drafts_common;
-    mod events;
-    mod init;
+    mod foundation_search_integration;
     mod mailbox_conversation;
     mod mailbox_create;
     mod message_body;

@@ -58,6 +58,14 @@ proton-network-monitor-service = { workspace = true }
 url = { workspace = true }
 zeroizing-alloc = { workspace = true }
 
+[features]
+# Foundation Search: Local body text search indexing
+# When enabled, message bodies are indexed locally for offline full-text search.
+foundation_search = ["proton-mail-common/foundation_search"]
+# Enable stdout logging for iOS (logs appear in Xcode console)
+# Works in both debug and release builds
+stdout_logging = []
+
 [dev-dependencies]
 proton-mail-api = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

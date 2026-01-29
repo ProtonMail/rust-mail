@@ -23,7 +23,7 @@
 //!
 //! // Create service with database connection and task service
 //! let task_service = TaskService::new(tokio::runtime::Handle::current())?;
-//! let service = MailSearchService::new(stash, task_service);
+//! let service = MailSearchService::new(stash, std::sync::Arc::new(task_service)).await?;
 //!
 //! // Create worker with message data provider
 //! let worker = SearchIndexWorker::new(stash, service.clone(), data_provider);
