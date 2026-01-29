@@ -256,13 +256,13 @@ mod tests {
     fn test_sanitize_pin(pin: Vec<u32>, expected: Result<Vec<u8>, PinError>) {
         let actual = PinCode::sanitize(pin);
 
-        if expected.is_err() {
-            assert_eq!(
-                actual.unwrap_err().to_string(),
-                expected.unwrap_err().to_string()
-            );
-        } else {
-            assert_eq!(actual.unwrap(), expected.unwrap());
+        match expected {
+            Ok(v) => {
+                assert_eq!(actual.unwrap(), v);
+            }
+            Err(v) => {
+                assert_eq!(actual.unwrap_err().to_string(), v.to_string());
+            }
         }
     }
 }

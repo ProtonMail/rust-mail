@@ -213,9 +213,9 @@ impl DecryptedMessageBody {
                     // We don't fetch atts that already exist
                     && att.attachment_type != AttachmentType::Pgp
             })
-            .cloned()
             .map(|att| {
                 let id = att.id();
+                let att = att.clone();
 
                 let fut = ctx.spawn_ex(async move |ctx| {
                     let tether = &mut ctx.user_stash().connection().await?;

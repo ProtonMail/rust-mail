@@ -278,8 +278,8 @@ impl Handler for AttachmentDispositionUpdateHandler {
         }
         .await;
 
-        if let Err(err) = &r {
-            if let Err(e) = save_attachment_error(
+        if let Err(err) = &r
+            && let Err(e) = save_attachment_error(
                 message_id,
                 action.attachment_id,
                 DraftSendResultOrigin::AttachmentDispositionSwap,
@@ -287,9 +287,8 @@ impl Handler for AttachmentDispositionUpdateHandler {
                 err,
             )
             .await
-            {
-                tracing::error!("Failed to update attachment metadata state: {e}");
-            }
+        {
+            tracing::error!("Failed to update attachment metadata state: {e}");
         }
 
         r

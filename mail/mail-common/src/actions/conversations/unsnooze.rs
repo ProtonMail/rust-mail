@@ -190,14 +190,12 @@ impl Handler for UnsnoozeHandler {
                 tx,
             )
             .await?
-            {
-                if let Some((_, time)) = action
+                && let Some((_, time)) = action
                     .conv_snooze_time
                     .iter_mut()
                     .find(|(conv_id, _)| *conv_id == *id)
-                {
-                    *time = label.context_snooze_time;
-                }
+            {
+                *time = label.context_snooze_time;
             }
 
             if changeset.contains(&rebase_key) {

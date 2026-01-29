@@ -170,7 +170,9 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
 }
 
 /// Execute an action in the application.
+#[derive(Default)]
 pub enum Command<Message> {
+    #[default]
     None,
     Message(Message),
     Task(BoxFuture<'static, Command<Message>>),
@@ -252,11 +254,5 @@ impl<Message> Command<Message> {
 
     pub fn is_none(&self) -> bool {
         matches!(self, Command::None)
-    }
-}
-
-impl<Message> Default for Command<Message> {
-    fn default() -> Self {
-        Self::None
     }
 }

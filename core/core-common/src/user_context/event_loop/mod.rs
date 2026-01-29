@@ -63,14 +63,14 @@ impl UserContext {
         // forced event poll remain unaffected.
         let event_loop_service = self.event_loop_service();
         let last_action_ids = event_loop_service.last_event_loop_action_ids().lock().await;
-        if let Some(last_action_id) = last_action_ids.last_event_loop_action_id_normal {
-            if let Err(e) = self.queue().cancel(last_action_id).await {
-                match e {
-                    QueuedError::ActionNotFound(_) | QueuedError::ActionInExecution(_) => {
-                        // nothing to do
-                    }
-                    e => return Err(e),
+        if let Some(last_action_id) = last_action_ids.last_event_loop_action_id_normal
+            && let Err(e) = self.queue().cancel(last_action_id).await
+        {
+            match e {
+                QueuedError::ActionNotFound(_) | QueuedError::ActionInExecution(_) => {
+                    // nothing to do
                 }
+                e => return Err(e),
             }
         }
         Ok(())
@@ -127,19 +127,19 @@ impl UserContext {
         } else {
             &mut last_action_ids.last_event_loop_action_id_normal
         };
-        if let Some(last_action_id) = *last_action_id {
-            if let Err(e) = self.queue().cancel(last_action_id).await {
-                match e {
-                    QueuedError::ActionNotFound(_) => {
-                        // do nothing
-                    }
-                    QueuedError::ActionInExecution(_) => {
-                        // Don't want to re-queue if event poll is already running
-                        return Ok(last_action_id);
-                    }
-                    e => {
-                        error!("Failed to cancel previous event loop: {e}");
-                    }
+        if let Some(last_action_id) = *last_action_id
+            && let Err(e) = self.queue().cancel(last_action_id).await
+        {
+            match e {
+                QueuedError::ActionNotFound(_) => {
+                    // do nothing
+                }
+                QueuedError::ActionInExecution(_) => {
+                    // Don't want to re-queue if event poll is already running
+                    return Ok(last_action_id);
+                }
+                e => {
+                    error!("Failed to cancel previous event loop: {e}");
                 }
             }
         }

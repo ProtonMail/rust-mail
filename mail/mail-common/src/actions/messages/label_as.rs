@@ -117,26 +117,26 @@ impl UndoLabelAsMessages {
                 .await?;
         }
 
-        if let Some(move_action) = self.must_archive {
-            if queue.cancel(move_action.id).await.is_err() {
-                let (label, unread) = move_action.action.0.build_undo_states();
-                queue
-                    .tether()
-                    .await?
-                    .tx::<_, _, AppError>(async |tx| {
-                        let metadata = Metadata::builder().with_dependency(move_action.id).build();
+        if let Some(move_action) = self.must_archive
+            && queue.cancel(move_action.id).await.is_err()
+        {
+            let (label, unread) = move_action.action.0.build_undo_states();
+            queue
+                .tether()
+                .await?
+                .tx::<_, _, AppError>(async |tx| {
+                    let metadata = Metadata::builder().with_dependency(move_action.id).build();
+                    queue
+                        .queue_action_with_metadata_in_tx(label, metadata.clone(), tx)
+                        .await?;
+                    if let Some(unread) = unread {
                         queue
-                            .queue_action_with_metadata_in_tx(label, metadata.clone(), tx)
+                            .queue_action_with_metadata_in_tx(unread, metadata.clone(), tx)
                             .await?;
-                        if let Some(unread) = unread {
-                            queue
-                                .queue_action_with_metadata_in_tx(unread, metadata.clone(), tx)
-                                .await?;
-                        }
-                        Ok(())
-                    })
-                    .await?;
-            }
+                    }
+                    Ok(())
+                })
+                .await?;
         };
 
         Ok(())

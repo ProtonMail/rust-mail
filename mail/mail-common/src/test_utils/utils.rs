@@ -174,7 +174,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         if message.unread {
             conv.num_unread += 1;
         }
-        extend_senders(&mut conv.senders, &[message.sender.clone()]);
+        extend_senders(&mut conv.senders, std::slice::from_ref(&message.sender));
         extend_recipients(&mut conv.recipients, &message.to_list.value);
         extend_recipients(&mut conv.recipients, &message.cc_list.value);
 

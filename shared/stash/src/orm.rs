@@ -27,7 +27,6 @@ use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
 use std::vec::IntoIter;
 use thiserror::Error;
-use tracing::error;
 
 /// Errors for conversion of database row data into record types.
 #[derive(Debug, Error, PartialEq)]

@@ -1159,10 +1159,10 @@ fn sanitize_attendee(mut attendee: RsvpAttendee) -> RsvpAttendee {
     //
     // [ ] someone@pm.me * someone@pm.me
     // ```
-    if let Some(name) = &attendee.name {
-        if *name == attendee.email {
-            attendee.name = None;
-        }
+    if let Some(name) = &attendee.name
+        && *name == attendee.email
+    {
+        attendee.name = None;
     }
 
     attendee

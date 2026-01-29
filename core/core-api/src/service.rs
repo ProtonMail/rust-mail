@@ -6,7 +6,6 @@ use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use tracing::error;
 
 /// A result containing an error that defaults to `ApiServiceError`.
 pub type ApiServiceResult<T, E = ApiServiceError> = Result<T, E>;

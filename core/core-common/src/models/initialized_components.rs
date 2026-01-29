@@ -9,7 +9,7 @@ use stash::exports::Transaction;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, info, trace};
 
 use crate::datatypes::{InitializationKey, InitializedComponentState};
 
