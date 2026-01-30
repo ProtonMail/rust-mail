@@ -52,20 +52,23 @@ path = "tests/crypto_async.rs"
 name = "srp"
 path = "tests/srp.rs"
 
+[dependencies]
+parking_lot = "0.12"
+subtle = "2.5.0"
+
 [dependencies.gopenpgp-sys]
 version = "0.3.3"
-registry-index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+registry = "proton"
+path = "../gopenpgp-sys"
 optional = true
 
 [dependencies.hex]
 version = "0.4.3"
 
-[dependencies.parking_lot]
-version = "0.12"
-
 [dependencies.proton-srp]
 version = "0.7.1"
-registry-index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+registry = "proton"
+path = "../proton-srp"
 
 [dependencies.rand]
 version = "0.8.5"
@@ -74,14 +77,11 @@ version = "0.8.5"
 version = "1"
 features = ["derive"]
 
-[dependencies.subtle]
-version = "2.5.0"
-
 [dependencies.thiserror]
 version = "1"
 
-[dev-dependencies.smol]
-version = "2.0.0"
+[dev-dependencies]
+smol = "2.0.0"
 
 [lints.clippy]
 cast_possible_truncation = "warn"

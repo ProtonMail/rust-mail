@@ -13,7 +13,7 @@ pub trait ParseStreamExt {
     fn parse_all<T: ParseAll>(&self) -> Result<T>;
 }
 
-impl<'a> ParseStreamExt for ParseStream<'a> {
+impl ParseStreamExt for ParseStream<'_> {
     fn parse_all<T: ParseAll>(&self) -> Result<T> {
         T::parse_all(self)
     }

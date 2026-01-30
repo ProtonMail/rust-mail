@@ -1,0 +1,11 @@
+# Group the imports by their kind: std first, then external crates, then local imports.
+group_imports = "One"
+
+# Only merge imports if they're from the same module.
+imports_granularity = "Module"
+
+# Don't merge derive macros.
+merge_derives = false
+
+# Wrap comments at the end of the line.
+wrap_comments = true

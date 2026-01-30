@@ -270,13 +270,13 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.12.3"
-registry = "proton"
+git = "https://github.com/ProtonMail/proton-crypto-rs.git"
+rev = "33d22de54c578408108f580d6cafae06f656da9a"
 features = ["sql"]
 
 [workspace.dependencies.proton-crypto]
-version = "0.7.1"
-registry = "proton"
+git = "https://github.com/ProtonMail/proton-crypto-rs.git"
+rev = "33d22de54c578408108f580d6cafae06f656da9a"
 
 [workspace.dependencies.proton-crypto-subtle]
 version = "0.1.0"
@@ -295,7 +295,7 @@ registry = "proton"
 
 [workspace.dependencies.muon]
 git = "https://gitlab.protontech.ch/rust/inbox/muon.git"
-rev = "4e410705f7becc18f1621eccc111211bc6c25345"
+rev = "abb717669f22948e6eccd8c0ea4ea00e58585895"
 features = ["unsealed"]
 
 [workspace.dependencies.proton-log-service]
