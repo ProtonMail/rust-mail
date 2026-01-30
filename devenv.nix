@@ -48,11 +48,33 @@ in
     EOF
   '';
 
-  # A workaround until cargo clippy resolves to 1.88
   overlays = [ inputs.rust-overlay.overlays.default ];
+
   packages =
+    let
+      rustVersion = (
+        let
+          file = builtins.readFile ./rust-toolchain.toml;
+          toml = builtins.fromTOML file;
+        in toml.toolchain.channel
+      );
+
+      rustTargets =
+        [
+          "wasm32-unknown-unknown"
+        ]
+        ++ lib.optionals pkgs.stdenv.isDarwin [
+          "aarch64-apple-ios"
+          "aarch64-apple-ios-sim"
+        ];
+
+      rustToolchain = pkgs.rust-bin.stable.${rustVersion}.default.override {
+        targets = rustTargets;
+      };
+    in
     with pkgs;
     [
+      rustToolchain
       bashInteractive
       git-cliff
       php # For iCal
@@ -60,20 +82,6 @@ in
       sql-formatter
       cargo-nextest
       cargo-insta
-
-      # A workaround until cargo clippy resolves to 1.88
-      (rust-bin.stable.latest.default.override {
-        extensions = [
-          "rust-src"
-          "rust-analyzer"
-          "rustfmt"
-          "clippy"
-        ];
-        targets = ["wasm32-unknown-unknown"] ++ lib.optionals pkgs.stdenv.isDarwin [
-          "aarch64-apple-ios"
-          "aarch64-apple-ios-sim"
-        ];
-      })
     ]
     ++ lib.optionals pkgs.stdenv.isDarwin (
       with pkgs;
@@ -85,22 +93,7 @@ in
     );
 
   languages = {
-    # Until cargo clippy resolves to 1.88
-    # rust = {
-    #   enable = true;
-    #   channel = "stable";
-    #   version = "1.88.0";
-
-    #   targets =
-    #     [
-    #       "wasm32-unknown-unknown"
-    #     ]
-    #     ++ lib.optionals pkgs.stdenv.isDarwin [
-    #       # iOS cross compilation
-    #       "aarch64-apple-ios"
-    #       "aarch64-apple-ios-sim"
-    #     ];
-    # };
+   # rust.enable = true; # This is disabled because we are using rust-overlay directly
 
     go = {
       enable = true; # For PGP
@@ -108,9 +101,6 @@ in
 
     python = {
       enable = true; # For changelog
-    };
-
-    python = {
       uv = {
         enable = true;
       };
