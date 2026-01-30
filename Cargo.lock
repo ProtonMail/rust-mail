@@ -3972,7 +3972,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.7.1"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=4e410705f7becc18f1621eccc111211bc6c25345#4e410705f7becc18f1621eccc111211bc6c25345"
+source = "git+https://gitlab.protontech.ch/rust/inbox/muon.git?rev=4e410705f7becc18f1621eccc111211bc6c25345#4e410705f7becc18f1621eccc111211bc6c25345"
 dependencies = [
  "anyhow",
  "async-channel",
