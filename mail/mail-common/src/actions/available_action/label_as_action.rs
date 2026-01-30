@@ -2,6 +2,7 @@
 #[path = "../../tests/actions/available_actions/label_as_action.rs"]
 mod tests;
 
+use itertools::Itertools;
 use proton_core_common::{
     datatypes::{LabelColor, LabelType, LocalLabelId},
     models::Label,
@@ -12,14 +13,13 @@ use std::collections::BTreeMap;
 /// This struct represents a label that can be used as an action.
 ///
 pub struct LabelAsAction {
-    /// The database id of the label.
     pub label_id: LocalLabelId,
 
-    /// The name of the label.
     pub name: String,
 
-    /// The color of the label.
     pub color: LabelColor,
+
+    pub order: u32,
 
     /// This field is used to determine if the label is selected or not
     /// for given list of messages or conversations.
@@ -55,10 +55,12 @@ impl LabelAsAction {
                     label_id: label.local_id?,
                     name: label.name.clone(),
                     color: label.color.clone(),
+                    order: label.display_order,
                     is_selected: Some(is_selected(label)),
                 }),
                 _ => None,
             })
+            .sorted_unstable_by(|one, other| one.order.cmp(&other.order))
             .collect()
     }
 
@@ -117,6 +119,7 @@ impl LabelAsActionMap {
                     Some(action)
                 }
             })
+            .sorted_unstable_by(|one, other| one.order.cmp(&other.order))
             .collect()
     }
 }
