@@ -2,6 +2,7 @@
 #[path = "../../tests/actions/available_actions/label_as_action.rs"]
 mod tests;
 
+use itertools::Itertools;
 use proton_core_common::{
     datatypes::{LabelColor, LabelType, LocalLabelId},
     models::Label,
@@ -59,6 +60,7 @@ impl LabelAsAction {
                 }),
                 _ => None,
             })
+            .sorted_unstable_by(|one, other| one.order.cmp(&other.order))
             .collect()
     }
 
@@ -117,6 +119,7 @@ impl LabelAsActionMap {
                     Some(action)
                 }
             })
+            .sorted_unstable_by(|one, other| one.order.cmp(&other.order))
             .collect()
     }
 }
