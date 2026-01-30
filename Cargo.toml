@@ -294,7 +294,7 @@ path = "crypto/crypto-pin-hash"
 registry = "proton"
 
 [workspace.dependencies.muon]
-git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
+git = "https://gitlab.protontech.ch/rust/inbox/muon.git"
 rev = "4e410705f7becc18f1621eccc111211bc6c25345"
 features = ["unsealed"]
 
