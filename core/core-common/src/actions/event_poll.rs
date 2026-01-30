@@ -11,6 +11,7 @@ use proton_action_queue::{
 use proton_event_loop::EventLoopError;
 use proton_event_loop::v6::EventSubscriberError;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use std::sync::Weak;
 
@@ -36,7 +37,7 @@ impl EventPoll {
     }
 }
 
-impl Action for EventPoll {
+impl Action<UserDb> for EventPoll {
     const TYPE: Type = Type("event_poll");
     const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::Normal;
@@ -54,7 +55,7 @@ impl Action for EventPoll {
 
 pub struct EventPollVersionConverter;
 
-impl VersionConverter for EventPollVersionConverter {
+impl VersionConverter<UserDb> for EventPollVersionConverter {
     type Output = EventPoll;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -106,7 +107,7 @@ pub struct EventPollHandler {
     pub ctx: Weak<UserContext>,
 }
 
-impl Handler for EventPollHandler {
+impl Handler<UserDb> for EventPollHandler {
     type Action = EventPoll;
 
     async fn apply_local(
@@ -114,7 +115,10 @@ impl Handler for EventPollHandler {
         _: ActionId,
         action: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         tracing::info!("Forced={}", action.force);
         Ok(())
     }
@@ -124,7 +128,7 @@ impl Handler for EventPollHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -132,8 +136,11 @@ impl Handler for EventPollHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         self.ctx
             .upgrade()
             .ok_or(ActionEventLoopError::LostContext)?
@@ -150,7 +157,7 @@ impl Handler for EventPollHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

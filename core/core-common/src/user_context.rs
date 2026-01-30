@@ -69,7 +69,7 @@ pub struct UserContext {
     // Essential services
     session: Session,
     user_stash: Stash<UserDb>,
-    queue: Queue,
+    queue: Queue<UserDb>,
     key_manager: Arc<CryptoKeyManager>,
     cancellation_token: CancellationToken,
     services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
@@ -251,7 +251,7 @@ impl UserContext {
     }
 
     #[must_use]
-    pub fn queue(&self) -> &Queue {
+    pub fn queue(&self) -> &Queue<UserDb> {
         &self.queue
     }
 

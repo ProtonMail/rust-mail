@@ -6,6 +6,7 @@ use proton_action_queue::action::{
     WriterGuard,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::tests::common::TestDb;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -40,7 +41,7 @@ struct V1Action {
     value: u32,
 }
 
-impl Action for V1Action {
+impl Action<TestDb> for V1Action {
     const TYPE: Type = Type("action");
     const VERSION: u32 = 1;
 
@@ -54,15 +55,15 @@ impl Action for V1Action {
 #[derive(Default)]
 struct V1ActionHandler;
 
-impl Handler for V1ActionHandler {
+impl Handler<TestDb> for V1ActionHandler {
     type Action = V1Action;
 
     async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 
@@ -70,8 +71,8 @@ impl Handler for V1ActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         panic!("should not be called");
     }
 
@@ -79,8 +80,11 @@ impl Handler for V1ActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         panic!("should not be called");
     }
 
@@ -89,8 +93,8 @@ impl Handler for V1ActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }
@@ -100,7 +104,7 @@ struct V2Action {
     value: String,
 }
 
-impl Action for V2Action {
+impl Action<TestDb> for V2Action {
     const TYPE: Type = Type("action");
     const VERSION: u32 = 2;
 
@@ -113,7 +117,7 @@ impl Action for V2Action {
 
 struct V2VersionConverter;
 
-impl VersionConverter for V2VersionConverter {
+impl VersionConverter<TestDb> for V2VersionConverter {
     type Output = V2Action;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -131,15 +135,15 @@ impl VersionConverter for V2VersionConverter {
 #[derive(Default)]
 struct V2ActionHandler;
 
-impl Handler for V2ActionHandler {
+impl Handler<TestDb> for V2ActionHandler {
     type Action = V2Action;
 
     async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         panic!("should not be called");
     }
 
@@ -147,8 +151,8 @@ impl Handler for V2ActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         panic!("should not be called");
     }
 
@@ -156,8 +160,11 @@ impl Handler for V2ActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         assert_eq!(action.value, END_VALUE);
         Ok(())
     }
@@ -167,8 +174,8 @@ impl Handler for V2ActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

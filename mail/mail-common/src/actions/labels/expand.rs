@@ -13,6 +13,7 @@ use proton_core_common::actions::dependency_builder::{
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 use tracing::{debug, info};
@@ -45,7 +46,7 @@ impl Expand {
     }
 }
 
-impl Action for Expand {
+impl Action<UserDb> for Expand {
     const TYPE: Type = Type("expand_label");
     const VERSION: u32 = 1;
 
@@ -67,7 +68,7 @@ pub struct ExpandHandler {
     pub api: Session,
 }
 
-impl Handler for ExpandHandler {
+impl Handler<UserDb> for ExpandHandler {
     type Action = Expand;
 
     async fn apply_local(
@@ -75,7 +76,7 @@ impl Handler for ExpandHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut label = Label::load(action.local_id, tx)
             .await?
             .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
@@ -116,7 +117,7 @@ impl Handler for ExpandHandler {
         id: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let Some(original_state) = action
             .original_state
             .filter(|original_state| *original_state != action.expand)
@@ -141,8 +142,8 @@ impl Handler for ExpandHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let action_equal_original_state = action
             .original_state
             .filter(|original_state| *original_state == action.expand)
@@ -193,7 +194,7 @@ impl Handler for ExpandHandler {
         action: &mut Self::Action,
         _: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         //TODO(ET-5183): Test me!
         self.apply_local(this_id, action, tx).await?;
         Ok(())

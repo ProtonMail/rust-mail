@@ -10,6 +10,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, RunTransaction};
 
@@ -37,7 +38,7 @@ impl OverrideFlag {
     }
 }
 
-impl Action for OverrideFlag {
+impl Action<UserDb> for OverrideFlag {
     const TYPE: Type = Type("override_user_feature_flag");
     const VERSION: u32 = 1;
 
@@ -61,7 +62,7 @@ pub struct OverrideFlagHandler {
     pub api: Session,
 }
 
-impl Handler for OverrideFlagHandler {
+impl Handler<UserDb> for OverrideFlagHandler {
     type Action = OverrideFlag;
 
     async fn apply_local(
@@ -69,7 +70,7 @@ impl Handler for OverrideFlagHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut flag = UserFeatureFlag::by_name(&action.flag_name, tx.tether())
             .await?
             .inspect(|flag| {
@@ -110,7 +111,7 @@ impl Handler for OverrideFlagHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut flag = UserFeatureFlag::by_name(&action.flag_name, tx.tether())
             .await?
             .ok_or_else(|| {
@@ -138,8 +139,8 @@ impl Handler for OverrideFlagHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let response = self
             .api
             .put_feature_flag_override(&action.flag_name, action.new_value)
@@ -184,7 +185,7 @@ impl Handler for OverrideFlagHandler {
         _action: &mut Self::Action,
         _: &RebaseChangeSet,
         _tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // We do not track feature flag updates as a part of rebasing
         // Nothing to do.
         Ok(())

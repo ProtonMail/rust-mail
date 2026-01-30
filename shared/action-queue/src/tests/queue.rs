@@ -2,7 +2,7 @@ use super::*;
 use crate::action::{
     Action, DefaultVersionConverter, Factory, MetadataBuilder, NoopError, Priority, Type,
 };
-use crate::tests::common::NoopActionHandler;
+use crate::tests::common::{NoopActionHandler, TestDb};
 use serde::{Deserialize, Serialize};
 use stash::params;
 use stash::stash::{Stash, StashConfiguration};
@@ -13,7 +13,7 @@ struct TestAction {
     v: u32,
 }
 
-impl Action for TestAction {
+impl Action<TestDb> for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
 
@@ -292,7 +292,7 @@ async fn validation() {
     assert!(matches!(err, QueuedError::Factory(_, _)));
 }
 
-async fn new_queue() -> Queue {
+async fn new_queue() -> Queue<TestDb> {
     let mut factory = Factory::default();
     factory
         .register::<TestAction>(NoopActionHandler::default())
@@ -309,7 +309,7 @@ struct Action2 {
     die: bool,
 }
 
-impl Action for Action2 {
+impl Action<TestDb> for Action2 {
     const TYPE: Type = Type("test_action_2");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
@@ -323,14 +323,14 @@ impl Action for Action2 {
 
 #[derive(Default)]
 struct ActionHandler2;
-impl Handler for ActionHandler2 {
+impl Handler<TestDb> for ActionHandler2 {
     type Action = Action2;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
+        tx: &Bond<'_, TestDb>,
     ) -> Result<(), NoopError> {
         if action.die {
             return Err(NoopError {});
@@ -356,7 +356,7 @@ impl Handler for ActionHandler2 {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
+        _: &Bond<'_, TestDb>,
     ) -> Result<(), NoopError> {
         unreachable!()
     }
@@ -365,7 +365,7 @@ impl Handler for ActionHandler2 {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
+        _: WriterGuard<'_, TestDb>,
     ) -> Result<(), NoopError> {
         unreachable!()
     }
@@ -374,8 +374,8 @@ impl Handler for ActionHandler2 {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
-    ) -> std::result::Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> std::result::Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(())
     }
 }

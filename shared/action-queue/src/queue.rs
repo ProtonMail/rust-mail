@@ -15,7 +15,6 @@ use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
-use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::collections::HashSet;
@@ -47,7 +46,7 @@ pub enum Error {
 
 /// Errors that result from queuing or apply actions via the queue.
 #[derive(thiserror::Error)]
-pub enum ActionError<T: Action> {
+pub enum ActionError<T: Action<Db>, Db: stash::marker::DatabaseMarker> {
     /// The execution of the action failed.
     #[error("{0}")]
     Action(T::Error),
@@ -66,8 +65,10 @@ pub enum MultiActionError {
     Queue(#[from] Error),
 }
 
-impl<T: Action> From<ActionError<T>> for MultiActionError {
-    fn from(value: ActionError<T>) -> Self {
+impl<T: Action<Db>, Db: stash::marker::DatabaseMarker> From<ActionError<T, Db>>
+    for MultiActionError
+{
+    fn from(value: ActionError<T, Db>) -> Self {
         match value {
             ActionError::Action(err) => {
                 MultiActionError::Action(anyhow::anyhow!("Error executing {}: {err:?}", T::TYPE))
@@ -84,7 +85,7 @@ impl From<StashError> for MultiActionError {
 }
 
 // Custom debug impl, otherwise T also needs to have Debug when it is not really necessary.
-impl<T: Action> fmt::Debug for ActionError<T> {
+impl<T: Action<Db>, Db: stash::marker::DatabaseMarker> fmt::Debug for ActionError<T, Db> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ActionError::Action(err) => {
@@ -105,7 +106,7 @@ impl<T: Action> fmt::Debug for ActionError<T> {
     }
 }
 
-impl<T: Action> From<StashError> for ActionError<T> {
+impl<T: Action<Db>, Db: stash::marker::DatabaseMarker> From<StashError> for ActionError<T, Db> {
     fn from(value: StashError) -> Self {
         Self::Queue(value.into())
     }
@@ -133,12 +134,16 @@ pub trait AsActionError {
     /// Extract the specified action's error from the error type.
     ///
     /// If the error is not present or can not be converted into, `None` should be returned.
-    fn as_action_error<T: Action>(&self) -> Option<&ActionError<T>>;
+    fn as_action_error<T: Action<Db>, Db: stash::marker::DatabaseMarker>(
+        &self,
+    ) -> Option<&ActionError<T, Db>>;
 }
 
 impl AsActionError for anyhow::Error {
-    fn as_action_error<T: Action>(&self) -> Option<&ActionError<T>> {
-        self.downcast_ref::<ActionError<T>>()
+    fn as_action_error<T: Action<Db>, Db: stash::marker::DatabaseMarker>(
+        &self,
+    ) -> Option<&ActionError<T, Db>> {
+        self.downcast_ref::<ActionError<T, Db>>()
     }
 }
 
@@ -173,8 +178,8 @@ pub struct QueuedMetadata {
     pub action_group: String,
 }
 
-impl From<StoredAction> for QueuedMetadata {
-    fn from(value: StoredAction) -> Self {
+impl<Db: stash::marker::DatabaseMarker> From<StoredAction<Db>> for QueuedMetadata {
+    fn from(value: StoredAction<Db>) -> Self {
         Self {
             id: value.id.unwrap(),
             action_type: value.action_type,
@@ -258,22 +263,22 @@ pub enum BroadcastMessage {
 /// actions to a specific [`ActionGroup`] and creating a [`QueueExecutor`] to operate on this
 /// group.
 ///
-pub struct Queue {
-    shared: Arc<Shared>,
+pub struct Queue<Db: stash::marker::DatabaseMarker> {
+    shared: Arc<Shared<Db>>,
 }
 
 /// Internal shared data used by the [`Queue`] and [`BackgroundWorker`].
-pub(crate) struct Shared {
-    stash: Stash<UserDb>,
-    factory: RwLock<Factory>,
+pub(crate) struct Shared<Db: stash::marker::DatabaseMarker> {
+    stash: Stash<Db>,
+    factory: RwLock<Factory<Db>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
 }
 
-impl Shared {
+impl<Db: stash::marker::DatabaseMarker> Shared<Db> {
     fn handler<T>(&self) -> Option<Arc<T::Handler>>
     where
-        T: Action,
+        T: Action<Db>,
     {
         self.factory.read().handler::<T>()
     }
@@ -291,25 +296,25 @@ pub enum ActionRemoteOutput<Remote> {
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
 /// [`Queue::queue_action_with_metadata`].
 ///
-pub struct QueuedActionOutput<T: Action> {
+pub struct QueuedActionOutput<T: Action<Db>, Db: stash::marker::DatabaseMarker> {
     /// Result of executing the action locally.
     pub local: T::LocalOutput,
     /// Id of the queued action.
     pub id: ActionId,
 }
 
-impl Queue {
-    pub async fn tether(&self) -> Result<Tether, StashError> {
+impl<Db: stash::marker::DatabaseMarker> Queue<Db> {
+    pub async fn tether(&self) -> Result<Tether<Db>, StashError> {
         self.shared.stash.connection().await
     }
 
     /// Create a new queue with the given `stash`;
-    pub async fn new(stash: Stash<UserDb>) -> Result<Self> {
-        Self::with_factory(stash, Factory::default()).await
+    pub async fn new(stash: Stash<Db>) -> Result<Self> {
+        Self::with_factory(stash, Factory::new()).await
     }
 
     /// Create a new queue with the given `stash` and `factory`;
-    pub async fn with_factory(stash: Stash<UserDb>, factory: Factory) -> Result<Self> {
+    pub async fn with_factory(stash: Stash<Db>, factory: Factory<Db>) -> Result<Self> {
         let mut tether = stash.connection().await?;
 
         db::migrate(&mut tether).await?;
@@ -327,13 +332,13 @@ impl Queue {
     }
 
     /// Register an [`Action`] with the factory.
-    pub fn register<T: Action>(&self, handler: T::Handler) -> FactoryResult<()> {
+    pub fn register<T: Action<Db>>(&self, handler: T::Handler) -> FactoryResult<()> {
         self.shared.factory.write().register::<T>(handler)
     }
 
     /// Register an [`Action`] with the factory and replace the current record
     /// if it already exists.
-    pub fn register_or_replace<T: Action>(&self, handler: T::Handler) {
+    pub fn register_or_replace<T: Action<Db>>(&self, handler: T::Handler) {
         self.shared
             .factory
             .write()
@@ -342,7 +347,7 @@ impl Queue {
 
     /// Return the database associated with the queue.
     #[must_use]
-    pub fn stash(&self) -> &Stash<UserDb> {
+    pub fn stash(&self) -> &Stash<Db> {
         &self.shared.stash
     }
 
@@ -362,7 +367,7 @@ impl Queue {
     ///
     /// This operation does not operate within execution guards. It is intended to be used
     /// before queue executor is resumed (during app initialization). Use with caution.
-    pub async fn delete_all_by_type<T: Action>(&self) -> QueuedResult<usize> {
+    pub async fn delete_all_by_type<T: Action<Db>>(&self) -> QueuedResult<usize> {
         let mut tether = self.shared.stash.connection().await?;
         Ok(tether
             .tx(async |tx| StoredAction::delete_by_type(tx, &T::TYPE).await)
@@ -372,7 +377,7 @@ impl Queue {
     /// Queue an `action` for execution at a later time.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.
-    pub async fn queue_action<T: Action>(&self, action: T) -> LocalOutput<T> {
+    pub async fn queue_action<T: Action<Db>>(&self, action: T) -> LocalOutput<Db, T> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
@@ -382,17 +387,17 @@ impl Queue {
     /// If one fails, everything is rolled back.
     ///
     /// Additionally, a `last_id` arg can be provided to say what this should depend on.
-    pub async fn queue_actions<T: Action>(
+    pub async fn queue_actions<T: Action<Db>>(
         &self,
         actions: impl IntoIterator<Item = T>,
         mut last_id: Option<ActionId>,
-    ) -> Result<Vec<QueuedActionOutput<T>>, ActionError<T>> {
+    ) -> Result<Vec<QueuedActionOutput<T, Db>>, ActionError<T, Db>> {
         self.shared
             .stash
             .connection()
             .await?
             .tx(async |tx| {
-                let mut res: Vec<QueuedActionOutput<T>> = vec![];
+                let mut res: Vec<QueuedActionOutput<T, Db>> = vec![];
 
                 for action in actions {
                     let meta = if let Some(last) = last_id {
@@ -413,11 +418,11 @@ impl Queue {
     }
 
     /// Queue an `action` for execution at a later time with a custom `metadata`.
-    pub async fn queue_action_with_metadata<T: Action>(
+    pub async fn queue_action_with_metadata<T: Action<Db>>(
         &self,
         action: T,
         metadata: Metadata,
-    ) -> LocalOutput<T> {
+    ) -> LocalOutput<Db, T> {
         self.shared
             .stash
             .connection()
@@ -430,12 +435,12 @@ impl Queue {
     }
 
     /// Queue an `action` for execution at a later time with a custom `metadata`.
-    pub async fn queue_action_with_metadata_in_tx<T: Action>(
+    pub async fn queue_action_with_metadata_in_tx<T: Action<Db>>(
         &self,
         mut action: T,
         metadata: Metadata,
-        tx: &Bond<'_>,
-    ) -> LocalOutput<T> {
+        tx: &Bond<'_, Db>,
+    ) -> LocalOutput<Db, T> {
         let span = tracing::debug_span!("queue::queue", type=T::TYPE.0);
 
         async {
@@ -472,23 +477,23 @@ impl Queue {
     /// exists or the types do not match, a new action will be queued instead.
     ///
     /// A default [`Metadata`] type is assigned to this `action`.
-    pub async fn replace_or_queue_action<T: Action>(
+    pub async fn replace_or_queue_action<T: Action<Db>>(
         &self,
         existing_id: ActionId,
         action: T,
-    ) -> LocalOutput<T> {
+    ) -> LocalOutput<Db, T> {
         self.replace_or_queue_action_with_metadata::<T>(existing_id, action, Metadata::default())
             .await
     }
 
     /// Attempt to replace an existing action with an updated version. If the action no longer
     /// exists or the types do not match, a new action will be queued instead.
-    pub async fn replace_or_queue_action_with_metadata<T: Action>(
+    pub async fn replace_or_queue_action_with_metadata<T: Action<Db>>(
         &self,
         existing_id: ActionId,
         mut action: T,
         metadata: Metadata,
-    ) -> LocalOutput<T> {
+    ) -> LocalOutput<Db, T> {
         let span = tracing::debug_span!("queue::replace", type=T::TYPE.0, existing_id=?existing_id);
         async {
             info!("Replacing {existing_id:?}");
@@ -562,7 +567,7 @@ impl Queue {
         Ok(StoredAction::pending_count(&tether).await?)
     }
 
-    pub async fn typed_actions_count<T: Action>(&self) -> Result<u64> {
+    pub async fn typed_actions_count<T: Action<Db>>(&self) -> Result<u64> {
         let tether = self.shared.stash.connection().await?;
         Ok(StoredAction::type_count::<T>(&tether).await?)
     }
@@ -610,7 +615,7 @@ impl Queue {
 
     /// Retrieve the next action to execute.
     #[cfg(test)]
-    pub(crate) async fn next_action(&self) -> Result<Option<StoredAction>, StashError> {
+    pub(crate) async fn next_action(&self) -> Result<Option<StoredAction<Db>>, StashError> {
         let tether = self.shared.stash.connection().await?;
         StoredAction::next(ActionGroup::default().as_ref(), &tether).await
     }
@@ -623,13 +628,13 @@ impl Queue {
 
     /// Create a new executor for this queue for a given `action_group`.
     #[must_use]
-    pub fn new_executor_with_group(&self, action_group: ActionGroup) -> QueueExecutor {
+    pub fn new_executor_with_group(&self, action_group: ActionGroup) -> QueueExecutor<Db> {
         QueueExecutor::new(action_group, Arc::clone(&self.shared))
     }
 
     /// Create a new executor for this queue for the default action group.
     #[must_use]
-    pub fn new_executor(&self) -> QueueExecutor {
+    pub fn new_executor(&self) -> QueueExecutor<Db> {
         self.new_executor_with_group(ActionGroup::default())
     }
 
@@ -659,7 +664,7 @@ impl Queue {
         &self,
         action_group: ActionGroup,
         change_set: &RebaseChangeSet,
-        tx: &Bond<'_>,
+        tx: &Bond<'_, Db>,
     ) -> QueuedResult<()> {
         let ids = StoredAction::rebase_action_order(action_group.as_ref(), tx).await?;
         if ids.is_empty() {
@@ -700,41 +705,43 @@ pub enum ActionRequeueReason {
     LostContext,
 }
 
-pub(crate) trait ErasedQueuedAction: Send {
+pub(crate) trait ErasedQueuedAction<Db: stash::marker::DatabaseMarker>: Send {
     fn execute<'a>(
         &'a mut self,
-        shared: &'a Shared,
-        tether: &'a mut Tether,
+        shared: &'a Shared<Db>,
+        tether: &'a mut Tether<Db>,
         guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
-        tx: &'a Bond,
+        tx: &'a Bond<'_, Db>,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
     fn rebase<'a>(
         &'a mut self,
-        action: StoredAction,
+        action: StoredAction<Db>,
         metadata: Arc<QueuedMetadata>,
         change_set: &'a RebaseChangeSet,
-        tx: &'a Bond,
+        tx: &'a Bond<'_, Db>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
-pub(crate) struct QueuedAction<T: Action + Send> {
+pub(crate) struct QueuedAction<T: Action<Db> + Send, Db: stash::marker::DatabaseMarker> {
     pub id: ActionId,
     pub action: T,
     pub handler: Arc<T::Handler>,
 }
 
-impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
+impl<T: Action<Db>, Db: stash::marker::DatabaseMarker> ErasedQueuedAction<Db>
+    for QueuedAction<T, Db>
+{
     fn execute<'a>(
         &'a mut self,
-        shared: &'a Shared,
-        tether: &'a mut Tether,
+        shared: &'a Shared<Db>,
+        tether: &'a mut Tether<Db>,
         guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
@@ -759,7 +766,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
 
     fn cancel<'a>(
         &'a mut self,
-        tx: &'a Bond,
+        tx: &'a Bond<'_, Db>,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let span = tracing::debug_span!("queue::revert", id=self.id.0, type=T::TYPE.0);
@@ -792,10 +799,10 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
 
     fn rebase<'a>(
         &'a mut self,
-        mut action: StoredAction,
+        mut action: StoredAction<Db>,
         metadata: Arc<QueuedMetadata>,
         change_set: &'a RebaseChangeSet,
-        tx: &'a Bond,
+        tx: &'a Bond<'_, Db>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let span = tracing::debug_span!("queue::rebase", id=self.id.0, type=T::TYPE.0);
         Box::pin(
@@ -824,20 +831,20 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
 ///
 /// Many executors can be assigned to a queue based on given [`ActionGroup`]. You can
 /// create one with [`Queue::new_executor()`].
-pub struct QueueExecutor {
-    shared: Arc<Shared>,
+pub struct QueueExecutor<Db: stash::marker::DatabaseMarker> {
+    shared: Arc<Shared<Db>>,
     action_group: ActionGroup,
     id: String,
 }
 
-impl Drop for QueueExecutor {
+impl<Db: stash::marker::DatabaseMarker> Drop for QueueExecutor<Db> {
     fn drop(&mut self) {
         tracing::info!(?self.id, "Dropping QueueExecutor");
     }
 }
 
-impl QueueExecutor {
-    fn new(action_group: ActionGroup, shared: Arc<Shared>) -> Self {
+impl<Db: stash::marker::DatabaseMarker> QueueExecutor<Db> {
+    fn new(action_group: ActionGroup, shared: Arc<Shared<Db>>) -> Self {
         Self {
             action_group,
             shared,
@@ -859,7 +866,7 @@ impl QueueExecutor {
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
         span: tracing::Span,
-    ) -> QueueAutoExecutor {
+    ) -> QueueAutoExecutor<Db> {
         self.into_auto_executor_with_policy(
             online,
             start_paused,
@@ -878,7 +885,7 @@ impl QueueExecutor {
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
         span: tracing::Span,
-    ) -> QueueAutoExecutor {
+    ) -> QueueAutoExecutor<Db> {
         QueueAutoExecutor::new(
             self,
             online,
@@ -911,7 +918,10 @@ impl QueueExecutor {
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
-    async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
+    async fn execute_impl(
+        &self,
+        tether: &mut Tether<Db>,
+    ) -> QueuedResult<Option<QueuedActionState>> {
         let Some((exec_guard, action)) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e:?}");
             e
@@ -972,8 +982,8 @@ impl QueueExecutor {
 
     async fn next_action(
         &self,
-        tether: &mut Tether,
-    ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
+        tether: &mut Tether<Db>,
+    ) -> Result<Option<(ExecutionGuard, StoredAction<Db>)>, StashError> {
         StoredAction::pop(self.id.clone(), self.action_group.as_ref(), tether).await
     }
 }
@@ -1054,21 +1064,22 @@ impl TaskSpawner for TokioTaskSpawner {
 ///
 /// In a cross-process setting we currently rely on a timeout to ensure that actions queued
 /// by another process are executed.
-pub struct QueueAutoExecutor {
+pub struct QueueAutoExecutor<Db: stash::marker::DatabaseMarker> {
     task: JoinHandle<()>,
     id: String,
     paused: watch::Sender<bool>,
+    _phantom: std::marker::PhantomData<Db>,
 }
 
-impl Drop for QueueAutoExecutor {
+impl<Db: stash::marker::DatabaseMarker> Drop for QueueAutoExecutor<Db> {
     fn drop(&mut self) {
         self.terminate();
     }
 }
 
-impl QueueAutoExecutor {
+impl<Db: stash::marker::DatabaseMarker> QueueAutoExecutor<Db> {
     fn new(
-        executor: QueueExecutor,
+        executor: QueueExecutor<Db>,
         online: Box<dyn OnlineStatusWaiter>,
         start_paused: bool,
         task_spawner: &impl TaskSpawner,
@@ -1088,6 +1099,7 @@ impl QueueAutoExecutor {
             task,
             id,
             paused: paused_tx,
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -1116,7 +1128,7 @@ impl QueueAutoExecutor {
     }
 
     async fn run(
-        executor: QueueExecutor,
+        executor: QueueExecutor<Db>,
         mut paused: watch::Receiver<bool>,
         mut online: Box<dyn OnlineStatusWaiter>,
         termination_policy: QueueAutoTerminationPolicy,
@@ -1211,14 +1223,14 @@ enum ActionExecutionFollowup {
     PickNextAction,
 }
 
-pub struct QueueAutoExecutorPool {
-    executors: Vec<QueueAutoExecutor>,
+pub struct QueueAutoExecutorPool<Db: stash::marker::DatabaseMarker> {
+    executors: Vec<QueueAutoExecutor<Db>>,
 }
 
-impl QueueAutoExecutorPool {
+impl<Db: stash::marker::DatabaseMarker> QueueAutoExecutorPool<Db> {
     #[must_use]
     pub fn new(
-        queue: &Queue,
+        queue: &Queue<Db>,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: &impl OnlineStatusWaiterBuilder,
@@ -1241,7 +1253,7 @@ impl QueueAutoExecutorPool {
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn with_termination_policy(
-        queue: &Queue,
+        queue: &Queue<Db>,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: &impl OnlineStatusWaiterBuilder,
@@ -1292,13 +1304,13 @@ impl QueueAutoExecutorPool {
     }
 }
 
-async fn execute_action_local<T: Action>(
+async fn execute_action_local<T: Action<Db>, Db: stash::marker::DatabaseMarker>(
     action: &mut T,
     handler: &T::Handler,
     metadata: Metadata,
     existing_id: Option<ActionId>,
-    tx: &Bond<'_>,
-) -> Result<(T::LocalOutput, StoredAction), ActionError<T>> {
+    tx: &Bond<'_, Db>,
+) -> Result<(T::LocalOutput, StoredAction<Db>), ActionError<T, Db>> {
     let mut stored_action = StoredAction::without_state::<T>(action.dependency_keys(), metadata);
     if let Some(exising_id) = existing_id {
         stored_action
@@ -1362,14 +1374,14 @@ async fn execute_action_local<T: Action>(
     Ok((local_output, stored_action))
 }
 
-async fn execute_action_remote<T: Action>(
-    shared: &Shared,
+async fn execute_action_remote<T: Action<Db>, Db: stash::marker::DatabaseMarker>(
+    shared: &Shared<Db>,
     id: ActionId,
     handler: &T::Handler,
     action: &mut T,
-    tether: &mut Tether,
+    tether: &mut Tether<Db>,
     guard: ExecutionGuard,
-) -> Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
+) -> Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T, Db>> {
     debug!("Applying action on remote");
 
     let writer_guard = WriterGuard::new(tether, &guard);
@@ -1451,9 +1463,9 @@ async fn execute_action_remote<T: Action>(
     result
 }
 
-async fn cancel_action_with_dependees(
-    shared: &Shared,
-    bond: &Bond<'_>,
+async fn cancel_action_with_dependees<Db: stash::marker::DatabaseMarker>(
+    shared: &Shared<Db>,
+    bond: &Bond<'_, Db>,
     action_id: ActionId,
 ) -> QueuedResult<Vec<Arc<QueuedMetadata>>> {
     let mut remaining_actions = vec![action_id];
@@ -1506,10 +1518,10 @@ async fn cancel_action_with_dependees(
     Ok(cancelled_actions)
 }
 
-fn decode_action(
-    factory: &RwLock<Factory>,
-    stored_action: StoredAction,
-) -> QueuedResult<(Box<dyn ErasedQueuedAction>, Arc<QueuedMetadata>)> {
+fn decode_action<Db: stash::marker::DatabaseMarker>(
+    factory: &RwLock<Factory<Db>>,
+    stored_action: StoredAction<Db>,
+) -> QueuedResult<(Box<dyn ErasedQueuedAction<Db>>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
 
     let action_type = stored_action.action_type.clone();

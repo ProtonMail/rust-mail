@@ -17,6 +17,7 @@ use proton_mail_common::test_utils::scroller::{
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailUserContext, api_conversation, api_message_meta};
+use stash::UserDb;
 use stash::orm::Model;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
@@ -156,7 +157,7 @@ async fn test_on_refresh_impl_contacts_network_error() {
 
     // Test Refresh::Contacts with network error
     let error = refresh(&user_ctx, Refresh::Contacts).await.unwrap_err();
-    let err = error.as_action_error::<ActionRefresh>().unwrap();
+    let err = error.as_action_error::<ActionRefresh, UserDb>().unwrap();
 
     assert!(matches!(
         err,

@@ -34,6 +34,7 @@ use proton_mail_common::test_utils::message_body::{
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::path::Path;
@@ -944,7 +945,7 @@ async fn total_attachment_size_more_than_limit() {
     };
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload>()
+        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload, UserDb>()
         .unwrap();
 
     assert!(matches!(
@@ -1062,7 +1063,7 @@ async fn total_attachment_count_exceeds_limit() {
     };
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload>()
+        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload, UserDb>()
         .unwrap();
 
     assert!(matches!(
@@ -1172,7 +1173,7 @@ async fn can_not_send_without_all_uploaded_attachments() {
     };
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .as_action_error::<proton_mail_common::actions::draft::Send, UserDb>()
         .unwrap();
     assert!(matches!(
         err,
@@ -1342,7 +1343,7 @@ async fn catch_storage_quota_exceeded_error() {
     };
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload>()
+        .as_action_error::<proton_mail_common::actions::draft::AttachmentUpload, UserDb>()
         .unwrap();
 
     assert!(matches!(
@@ -1557,7 +1558,9 @@ async fn swap_attachment_disposition_retry() {
         unreachable!();
     };
 
-    let e = e.as_action_error::<AttachmentDispositionUpdate>().unwrap();
+    let e = e
+        .as_action_error::<AttachmentDispositionUpdate, UserDb>()
+        .unwrap();
     assert!(matches!(
         e,
         ActionError::Action(MailContextError::Draft(

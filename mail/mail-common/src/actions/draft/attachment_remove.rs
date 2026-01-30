@@ -16,8 +16,8 @@ use proton_mail_api::services::proton::ProtonMail;
 use serde::Deserialize;
 use serde_with::serde_derive::Serialize;
 use stash::orm::Model as _;
-use stash::params;
 use stash::stash::{Bond, Tether};
+use stash::{UserDb, params};
 use tracing::{debug, error, info};
 
 #[derive(Serialize, Deserialize)]
@@ -53,7 +53,7 @@ impl AttachmentRemove {
     }
 }
 
-impl Action for AttachmentRemove {
+impl Action<UserDb> for AttachmentRemove {
     const TYPE: Type = Type("draft_attachment_remove");
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
     const VERSION: u32 = 1;
@@ -70,7 +70,7 @@ pub struct AttachmentRemoveHandler {
     pub api: Session,
 }
 
-impl Handler for AttachmentRemoveHandler {
+impl Handler<UserDb> for AttachmentRemoveHandler {
     type Action = AttachmentRemove;
 
     async fn apply_local(
@@ -78,7 +78,10 @@ impl Handler for AttachmentRemoveHandler {
         this_id: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let Some(mut attachment_metadata) =
             DraftAttachmentMetadata::find_by_id(action.attachment_id, tx)
                 .await
@@ -132,7 +135,7 @@ impl Handler for AttachmentRemoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // Restore undeleted status.
         if let Some(mut attachment_metadata) =
             DraftAttachmentMetadata::find_by_id(action.attachment_id, tx)
@@ -165,8 +168,11 @@ impl Handler for AttachmentRemoveHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut writer_guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut writer_guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         // check metadata to see if attachment is owned or inherited
         let Some(attachment_metadata) =
             DraftAttachmentMetadata::find_by_id(action.attachment_id, writer_guard.tether())
@@ -195,7 +201,7 @@ impl Handler for AttachmentRemoveHandler {
 
         // Delete metadata & attachment record
         writer_guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+            .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx: &Bond<'_>| {
                 // If we own the attachment, delete it.
                 if matches!(
                     attachment_metadata.ownership,
@@ -225,7 +231,7 @@ impl Handler for AttachmentRemoveHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

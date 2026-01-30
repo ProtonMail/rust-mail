@@ -186,7 +186,7 @@ impl ModelIdExtension for Conversation {
     }
 }
 
-type LabelAsResult = Result<QueuedActionOutput<LabelAs>, QueueActionError<LabelAs>>;
+type LabelAsResult = Result<QueuedActionOutput<LabelAs, UserDb>, QueueActionError<LabelAs, UserDb>>;
 
 impl Conversation {
     pub fn label(&self, local_id: LocalLabelId) -> Option<&ConversationLabel> {
@@ -195,7 +195,10 @@ impl Conversation {
             .find(|&label| label.local_label_id == Some(local_id))
     }
 
-    pub async fn action_star(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
+    pub async fn action_star(
+        queue: &Queue<UserDb>,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
         let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
@@ -205,7 +208,10 @@ impl Conversation {
         Self::action_apply_label(queue, label_id, ids).await
     }
 
-    pub async fn action_unstar(queue: &Queue, ids: Vec<LocalConversationId>) -> LabelAsResult {
+    pub async fn action_unstar(
+        queue: &Queue<UserDb>,
+        ids: Vec<LocalConversationId>,
+    ) -> LabelAsResult {
         let tether = queue.stash().connection().await?;
 
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
@@ -216,35 +222,35 @@ impl Conversation {
     }
 
     pub async fn action_mark_read(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<MarkRead>, QueueActionError<MarkRead>> {
+    ) -> Result<QueuedActionOutput<MarkRead, UserDb>, QueueActionError<MarkRead, UserDb>> {
         let action = MarkRead::new(label_id, conversation_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_mark_unread(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
+    ) -> Result<QueuedActionOutput<MarkUnread, UserDb>, QueueActionError<MarkUnread, UserDb>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_delete(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete, UserDb>, QueueActionError<Delete, UserDb>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_move(
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalConversationId>,
     ) -> Result<Option<Undo>, MailContextError> {
@@ -261,16 +267,16 @@ impl Conversation {
     }
 
     pub async fn action_mark_deleted(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete, UserDb>, QueueActionError<Delete, UserDb>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.queue_action(action).await
     }
 
     pub async fn action_remove_label(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label: LocalLabelId,
         ids: Vec<LocalConversationId>,
     ) -> LabelAsResult {
@@ -281,7 +287,7 @@ impl Conversation {
     }
 
     pub async fn action_apply_label(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label: LocalLabelId,
         ids: Vec<LocalConversationId>,
     ) -> LabelAsResult {
@@ -293,7 +299,7 @@ impl Conversation {
 
     pub async fn action_label_as(
         tether: &Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         source_label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         selected_label_ids: Vec<LocalLabelId>,
@@ -425,20 +431,20 @@ impl Conversation {
     }
 
     pub async fn action_snooze(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         snooze_time: UnixTimestamp,
-    ) -> Result<QueuedActionOutput<Snooze>, QueueActionError<Snooze>> {
+    ) -> Result<QueuedActionOutput<Snooze, UserDb>, QueueActionError<Snooze, UserDb>> {
         let action = Snooze::new(label_id, conversation_ids, snooze_time);
         queue.queue_action(action).await
     }
 
     pub async fn action_unsnooze(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Unsnooze>, QueueActionError<Unsnooze>> {
+    ) -> Result<QueuedActionOutput<Unsnooze, UserDb>, QueueActionError<Unsnooze, UserDb>> {
         let action = Unsnooze::new(label_id, conversation_ids);
         queue.queue_action(action).await
     }
@@ -1804,7 +1810,7 @@ impl Conversation {
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
         session: &Session,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Conversation, AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
@@ -1926,7 +1932,7 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
         extra_sync_allowed: bool,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
         else {

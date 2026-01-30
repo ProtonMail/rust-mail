@@ -15,6 +15,7 @@ use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 
@@ -43,7 +44,7 @@ impl Block {
     }
 }
 
-impl Action for Block {
+impl Action<UserDb> for Block {
     const TYPE: Type = Type("block");
     const VERSION: u32 = 1;
 
@@ -64,7 +65,7 @@ pub struct BlockHandler {
     pub api: Session,
 }
 
-impl Handler for BlockHandler {
+impl Handler<UserDb> for BlockHandler {
     type Action = Block;
 
     async fn apply_local(
@@ -72,7 +73,7 @@ impl Handler for BlockHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         tracing::info!("Blocking {}", action.email);
 
         let previous = IncomingDefault::by_email(action.email.as_clear_text_str(), bond).await?;
@@ -107,7 +108,7 @@ impl Handler for BlockHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         tracing::info!(
             "Removing block for {} ({:?})",
             action.email,
@@ -131,8 +132,11 @@ impl Handler for BlockHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         tracing::info!("Blocking {}", action.email);
 
         let Some(local_id) = action.local_id else {
@@ -161,7 +165,7 @@ impl Handler for BlockHandler {
         };
 
         guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+            .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                 IncomingDefault::update_from_api(local_id, new_incoming, tx).await?;
                 Ok(())
             })
@@ -176,7 +180,7 @@ impl Handler for BlockHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

@@ -212,7 +212,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash<UserDb>,
         api: &Session,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;
@@ -285,7 +285,7 @@ impl ContextualConversation {
         stash: &Stash<UserDb>,
         api: &Session,
         // set to some for rebasing
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -308,7 +308,7 @@ impl ContextualConversation {
         view_options: ConversationViewOptions,
         stash: &Stash<UserDb>,
         api: &Session,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         Self::conversation_and_messages_impl(
             network_monitor_service,
@@ -332,7 +332,7 @@ impl ContextualConversation {
         stash: &Stash<UserDb>,
         api: &Session,
         extra_sync_allowed: bool,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let t = Instant::now();
         let mut conn = stash.connection().await?;

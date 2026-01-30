@@ -24,7 +24,7 @@ impl Unlabel {
     }
 }
 
-impl Action for Unlabel {
+impl Action<UserDb> for Unlabel {
     const TYPE: Type = Type("unlabel_messages");
     const VERSION: u32 = 1;
 
@@ -43,7 +43,7 @@ pub struct UnlabelHandler {
     pub api: Proton,
 }
 
-impl Handler for UnlabelHandler {
+impl Handler<UserDb> for UnlabelHandler {
     type Action = Unlabel;
 
     async fn apply_local(
@@ -51,7 +51,7 @@ impl Handler for UnlabelHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.resolve_ids(tx).await?;
         Message::remove_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         Ok(())
@@ -62,7 +62,7 @@ impl Handler for UnlabelHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::apply_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         action
             .0
@@ -75,8 +75,11 @@ impl Handler for UnlabelHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let message_ids = action.0.data.remote_target_ids.clone();
         let label_id = action.0.remote_label_id.clone().expect("Should be set");
 
@@ -94,7 +97,7 @@ impl Handler for UnlabelHandler {
             error!("Unlabel messages failed for: {failed_ids:?} ");
 
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
                     Message::apply_label(action.0.label_id, local_ids, tx)

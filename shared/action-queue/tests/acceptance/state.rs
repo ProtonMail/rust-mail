@@ -4,6 +4,7 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_action_queue::rebase::RebaseChangeSet;
+use proton_action_queue::tests::common::TestDb;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -93,7 +94,7 @@ struct TestAction {
     v: u32,
 }
 
-impl Action for TestAction {
+impl Action<TestDb> for TestAction {
     const TYPE: Type = Type("test");
     const VERSION: u32 = 1;
 
@@ -113,15 +114,15 @@ const ACTION_VALUE_FINAL: u32 = 512;
 
 const ACTION_KEY: &str = "bar";
 
-impl Handler for TestActionHandler {
+impl Handler<TestDb> for TestActionHandler {
     type Action = TestAction;
 
     async fn apply_local(
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         assert_eq!(action.v, ACTION_VALUE);
         action.v = ACTION_VALUE_AFTER_LOCAL_APPLY;
         Ok(tx
@@ -133,8 +134,8 @@ impl Handler for TestActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         panic!("should not be called");
     }
 
@@ -142,11 +143,14 @@ impl Handler for TestActionHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut writer_guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut writer_guard: WriterGuard<'_, TestDb>,
+    ) -> Result<
+        <Self::Action as Action<TestDb>>::RemoteOutput,
+        <Self::Action as Action<TestDb>>::Error,
+    > {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
         writer_guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+            .tx::<_, _, <Self::Action as Action<TestDb>>::Error>(async |tx: &Bond<'_, TestDb>| {
                 Ok(tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?)
             })
             .await?;
@@ -158,8 +162,8 @@ impl Handler for TestActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        tx: &Bond<'_, TestDb>,
+    ) -> Result<(), <Self::Action as Action<TestDb>>::Error> {
         Ok(tx
             .ext_insert_value(ACTION_KEY, ACTION_VALUE_AFTER_LOCAL_APPLY)
             .await?)

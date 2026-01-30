@@ -12,6 +12,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelExtension};
 use proton_mail_api::services::proton::ProtonMail as _;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 use std::mem;
@@ -73,7 +74,7 @@ impl DeleteAllMessagesInLabel {
     }
 }
 
-impl Action for DeleteAllMessagesInLabel {
+impl Action<UserDb> for DeleteAllMessagesInLabel {
     const TYPE: Type = Type("delete_all_messages_in_label");
     const VERSION: u32 = 1;
 
@@ -145,7 +146,7 @@ impl DeleteAllMessagesInLabelHandler {
     }
 }
 
-impl Handler for DeleteAllMessagesInLabelHandler {
+impl Handler<UserDb> for DeleteAllMessagesInLabelHandler {
     type Action = DeleteAllMessagesInLabel;
 
     async fn apply_local(
@@ -153,7 +154,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label = self.label(action, tx).await?;
 
         if label.is_busy(tx).await? {
@@ -176,7 +177,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label = self.label(action, tx).await?;
 
         label.mark_idle(tx).await?;
@@ -213,8 +214,8 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label = self.label(action, guard.tether()).await?;
 
         info!(
@@ -244,7 +245,7 @@ impl Handler for DeleteAllMessagesInLabelHandler {
         action: &mut Self::Action,
         _: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let label = self.label(action, tx).await?;
 
         // Since new conversation and messages/conversations can be added to

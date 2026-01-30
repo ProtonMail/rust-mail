@@ -9,6 +9,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -27,7 +28,7 @@ impl Delete {
     }
 }
 
-impl Action for Delete {
+impl Action<UserDb> for Delete {
     const TYPE: Type = Type("delete_contacts");
     const VERSION: u32 = 1;
 
@@ -48,7 +49,7 @@ pub struct DeleteHandler {
     pub api: Session,
 }
 
-impl Handler for DeleteHandler {
+impl Handler<UserDb> for DeleteHandler {
     type Action = Delete;
 
     async fn apply_local(
@@ -56,7 +57,7 @@ impl Handler for DeleteHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 
         action.remote_ids = contacts
@@ -76,7 +77,7 @@ impl Handler for DeleteHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 
         for mut contact in contacts {
@@ -90,8 +91,8 @@ impl Handler for DeleteHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let failed = Contact::delete_from_remote(&action.remote_ids, &self.api).await?;
         let mut failed_local_ids = Vec::with_capacity(failed.len());
 
@@ -122,7 +123,7 @@ impl Handler for DeleteHandler {
         action: &mut Self::Action,
         _: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         //TODO(ET-5183): Test me!
         self.apply_local(this_id, action, tx).await
     }

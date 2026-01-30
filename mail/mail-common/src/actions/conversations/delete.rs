@@ -13,6 +13,7 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{self, Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::error;
 
@@ -28,7 +29,7 @@ impl Delete {
     }
 }
 
-impl Action for Delete {
+impl Action<UserDb> for Delete {
     const TYPE: Type = Type("delete_conversations");
     const VERSION: u32 = 1;
 
@@ -47,7 +48,7 @@ pub struct DeleteHandler {
     pub api: Session,
 }
 
-impl Handler for DeleteHandler {
+impl Handler<UserDb> for DeleteHandler {
     type Action = Delete;
 
     async fn apply_local(
@@ -55,7 +56,10 @@ impl Handler for DeleteHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         if action.0.data.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
         }
@@ -70,7 +74,7 @@ impl Handler for DeleteHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Conversation::mark_undeleted(action.0.label_id, action.0.data.target_ids.clone(), tx)
             .await?;
         Ok(())
@@ -80,8 +84,11 @@ impl Handler for DeleteHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let (remote_label_id, remote_target_ids) =
             action.0.resolve_ids_legacy(guard.tether()).await?;
         let remote_label_id =
@@ -109,7 +116,7 @@ impl Handler for DeleteHandler {
 
         if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     if !failed_ids.is_empty() {
                         GenericActionData::<Conversation>::mark_rollback(
                             &failed_ids,
@@ -150,7 +157,7 @@ impl Handler for DeleteHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         for id in &action.0.data.target_ids {
             let rebase_key: RebaseKey = (*id).into();
             if changeset.contains(&rebase_key) {

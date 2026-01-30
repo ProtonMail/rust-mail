@@ -18,6 +18,7 @@ use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::request_data::NewAttachmentDisposition;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 
@@ -54,7 +55,7 @@ pub enum DraftAttachmentDispositionUpdateMode {
     Retry,
 }
 
-impl Action for AttachmentDispositionUpdate {
+impl Action<UserDb> for AttachmentDispositionUpdate {
     const TYPE: Type = Type("draft_attachment_disposition_update");
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
     const VERSION: u32 = 1;
@@ -70,7 +71,7 @@ pub struct AttachmentDispositionUpdateHandler {
     pub api: Session,
 }
 
-impl Handler for AttachmentDispositionUpdateHandler {
+impl Handler<UserDb> for AttachmentDispositionUpdateHandler {
     type Action = AttachmentDispositionUpdate;
 
     async fn apply_local(
@@ -78,7 +79,10 @@ impl Handler for AttachmentDispositionUpdateHandler {
         this_id: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let mut metadata = DraftAttachmentMetadata::find_by_id(action.attachment_id, tx)
             .await?
             .ok_or(AttachmentDispositionSwapError::AttachmentMetadataNotFound(
@@ -146,7 +150,7 @@ impl Handler for AttachmentDispositionUpdateHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // Nothing to undo, we remain in an error state
         Ok(())
     }
@@ -155,8 +159,11 @@ impl Handler for AttachmentDispositionUpdateHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut writer_guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut writer_guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let message_id = DraftMetadata::find_by_id(action.metadata_id, writer_guard.tether())
             .await?
             .ok_or(AttachmentDispositionSwapError::MetadataNotFound(
@@ -299,7 +306,7 @@ impl Handler for AttachmentDispositionUpdateHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

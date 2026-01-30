@@ -14,6 +14,7 @@ use proton_core_api::session::Session;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::{debug, error, info};
 
@@ -38,7 +39,7 @@ impl Discard {
     }
 }
 
-impl Action for Discard {
+impl Action<UserDb> for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::High;
@@ -55,7 +56,7 @@ pub struct DiscardHandler {
     pub api: Session,
 }
 
-impl Handler for DiscardHandler {
+impl Handler<UserDb> for DiscardHandler {
     type Action = Discard;
 
     async fn apply_local(
@@ -63,7 +64,10 @@ impl Handler for DiscardHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         info!("Discarding draft {}", action.metadata_id);
 
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
@@ -98,7 +102,7 @@ impl Handler for DiscardHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         // Only undo the delete of the message. The draft metadata can be re-created on
         // the next draft open call.
         if let Some(local_message_id) = action.local_message_id {
@@ -114,8 +118,11 @@ impl Handler for DiscardHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let Some(local_message_id) = action.local_message_id else {
             // if there is no local message id, we never create a message and there is
             // nothing to do.
@@ -126,7 +133,7 @@ impl Handler for DiscardHandler {
             Message::local_id_counterpart(local_message_id, guard.tether()).await?
         else {
             return guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     info!("No server state, deleting locally only");
                     // No remote id, we can't issue the request, we should only delete the local data.
                     Message::delete_by_id(local_message_id, tx)
@@ -186,7 +193,7 @@ impl Handler for DiscardHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

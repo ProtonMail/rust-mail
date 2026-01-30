@@ -14,6 +14,7 @@ use proton_mail_common::test_utils::message_body::{
     message_body_test_user_secret,
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use stash::UserDb;
 use stash::orm::Model;
 
 #[tokio::test]
@@ -154,7 +155,7 @@ async fn draft_undo_send_failure() {
 
     match err {
         QueuedError::Action(err, _) => {
-            let action_err = err.as_action_error::<UndoSend>().unwrap();
+            let action_err = err.as_action_error::<UndoSend, UserDb>().unwrap();
             assert!(matches!(
                 action_err,
                 ActionError::Action(MailContextError::Draft(Error::Undo(

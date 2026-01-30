@@ -14,6 +14,7 @@ use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::error;
 
@@ -32,7 +33,7 @@ impl MarkRead {
     }
 }
 
-impl Action for MarkRead {
+impl Action<UserDb> for MarkRead {
     const TYPE: Type = Type("mark_conversations_read");
     const VERSION: u32 = 1;
 
@@ -51,7 +52,7 @@ pub struct MarkReadHandler {
     pub api: Session,
 }
 
-impl Handler for MarkReadHandler {
+impl Handler<UserDb> for MarkReadHandler {
     type Action = MarkRead;
 
     async fn apply_local(
@@ -59,7 +60,7 @@ impl Handler for MarkReadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let conversations =
             Conversation::find_by_ids(action.data.data.target_ids.clone(), tx).await?;
         action.snooze_remind_ids = conversations
@@ -81,7 +82,7 @@ impl Handler for MarkReadHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         if !action.snooze_remind_ids.is_empty() {
             Conversation::set_display_snooze_reminder(&action.snooze_remind_ids, tx).await?;
         }
@@ -95,8 +96,11 @@ impl Handler for MarkReadHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let (_, remote_target_ids) = action.data.resolve_ids(guard.tether()).await?;
 
         // API call return an error 2501(Conversation was not updated) for conversation already read
@@ -115,7 +119,7 @@ impl Handler for MarkReadHandler {
         if !failed_ids.is_empty() {
             error!("Mark read operation failed for: {:?}", failed_ids);
             guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                .tx::<_, _, <Self::Action as Action<UserDb>>::Error>(async |tx| {
                     GenericActionData::<Conversation>::mark_rollback(
                         &failed_ids,
                         RollbackItemType::Conversation,
@@ -144,7 +148,7 @@ impl Handler for MarkReadHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action
             .data
             .rebase_changes_sync(changeset, tx, |id, modified, tx| {

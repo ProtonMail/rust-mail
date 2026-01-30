@@ -23,6 +23,7 @@ use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
 use proton_event_loop::v6::EventSubscriberError;
 use proton_event_loop::{EventLoopError, EventProviderError};
+use stash::UserDb;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -714,12 +715,12 @@ impl From<MailActionError> for ProtonMailError {
     }
 }
 
-impl<T> From<InternalActionError<T>> for ProtonMailError
+impl<T> From<InternalActionError<T, UserDb>> for ProtonMailError
 where
-    T: Action,
+    T: Action<UserDb>,
     T::Error: Into<Self>,
 {
-    fn from(error: InternalActionError<T>) -> Self {
+    fn from(error: InternalActionError<T, UserDb>) -> Self {
         let _guard = log_error(&error);
         match error {
             #[allow(clippy::useless_conversion, reason = "It is not useless, clippy")]

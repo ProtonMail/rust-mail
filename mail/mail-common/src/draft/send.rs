@@ -39,6 +39,7 @@ use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
 use secrecy::{ExposeSecret, SecretString};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
@@ -745,7 +746,7 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
 pub async fn cancel_schedule_send(
     message_id: LocalMessageId,
     tether: &mut Tether,
-    queue: &Queue,
+    queue: &Queue<UserDb>,
     session: &Session,
     wait_on_completion_duration: Duration,
     network_monitor_service: &NetworkMonitorService,

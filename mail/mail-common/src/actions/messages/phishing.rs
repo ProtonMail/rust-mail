@@ -12,6 +12,7 @@ use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use std::sync::Weak;
 use tracing::info;
@@ -32,7 +33,7 @@ impl ReportPhishing {
     }
 }
 
-impl Action for ReportPhishing {
+impl Action<UserDb> for ReportPhishing {
     const TYPE: Type = Type("report_phishing");
     const VERSION: u32 = 1;
 
@@ -53,7 +54,7 @@ pub struct ReportPhishingHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for ReportPhishingHandler {
+impl Handler<UserDb> for ReportPhishingHandler {
     type Action = ReportPhishing;
 
     async fn apply_local(
@@ -61,7 +62,7 @@ impl Handler for ReportPhishingHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::set_flags(action.message_id, MessageFlags::PHISHING_MANUAL, bond).await?;
 
         Ok(())
@@ -72,7 +73,7 @@ impl Handler for ReportPhishingHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::unset_flags(action.message_id, MessageFlags::PHISHING_MANUAL, bond).await?;
 
         Ok(())
@@ -82,8 +83,11 @@ impl Handler for ReportPhishingHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
         let tether = guard.tether();
 
@@ -113,7 +117,7 @@ impl Handler for ReportPhishingHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let rebase_key: RebaseKey = action.message_id.into();
         if changeset.contains(&rebase_key) {
             Message::set_flags(action.message_id, MessageFlags::PHISHING_MANUAL, tx).await?;

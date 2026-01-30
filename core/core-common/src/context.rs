@@ -61,9 +61,9 @@ use services::{
     DeviceInfoService, EventPollConfigService, FeatureFlagsService, HvNotifierService,
     SessionObserverService,
 };
-use stash::AccountDb;
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
+use stash::{AccountDb, UserDb};
 use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -118,8 +118,10 @@ pub enum CoreContextError {
     Other(#[from] AnyhowError),
 }
 
-impl<T: Action<Error: Into<CoreContextError>>> From<QueueActionError<T>> for CoreContextError {
-    fn from(value: QueueActionError<T>) -> Self {
+impl<T: Action<UserDb, Error: Into<CoreContextError>>> From<QueueActionError<T, UserDb>>
+    for CoreContextError
+{
+    fn from(value: QueueActionError<T, UserDb>) -> Self {
         match value {
             QueueActionError::Action(e) => e.into(),
             QueueActionError::Queue(e) => Self::ActionQueue(e),

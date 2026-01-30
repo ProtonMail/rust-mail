@@ -10,13 +10,14 @@ use proton_action_queue::queue::Queue;
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Message>);
 
-impl VersionConverter for LabelAs {
+impl VersionConverter<UserDb> for LabelAs {
     type Output = Self;
 
     fn convert(old_version: u32, _: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -24,7 +25,7 @@ impl VersionConverter for LabelAs {
     }
 }
 
-impl Action for LabelAs {
+impl Action<UserDb> for LabelAs {
     const TYPE: Type = Type("label_messages_as");
     const VERSION: u32 = 3;
     type VersionConverter = Self;
@@ -42,7 +43,7 @@ pub struct LabelAsHandler {
     pub api: Session,
 }
 
-impl Handler for LabelAsHandler {
+impl Handler<UserDb> for LabelAsHandler {
     type Action = LabelAs;
 
     async fn apply_local(
@@ -50,7 +51,7 @@ impl Handler for LabelAsHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<bool, <Self::Action as Action>::Error> {
+    ) -> Result<bool, <Self::Action as Action<UserDb>>::Error> {
         action.0.apply_local_common(tx).await?;
 
         let total = if let Some(id) = action.0.source_label_id {
@@ -67,7 +68,7 @@ impl Handler for LabelAsHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.revert_local(tx).await?;
         Ok(())
     }
@@ -76,8 +77,11 @@ impl Handler for LabelAsHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         action.0.apply_remote(&self.api, guard).await
     }
     async fn rebase_local(
@@ -86,7 +90,7 @@ impl Handler for LabelAsHandler {
         action: &mut Self::Action,
         changeset: &RebaseChangeSet,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         action.0.rebase_local(changeset, tx).await?;
         Ok(())
     }
@@ -104,7 +108,7 @@ pub struct UndoLabelAsArchiveMessages {
 }
 
 impl UndoLabelAsMessages {
-    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+    pub async fn undo(self, queue: &Queue<UserDb>, _: &Tether) -> Result<(), AppError> {
         if queue.cancel(self.id).await.is_err() {
             // The queue couldn't revert. This means that we're on our own to undo this.
             // Let's create the opposite action: Swap add and remove.

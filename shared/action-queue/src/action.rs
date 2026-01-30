@@ -132,9 +132,9 @@ impl FromSql for Priority {
 ///
 /// This will be called if we encounter a queued action which was created with an older
 /// version of the implementation.
-pub trait VersionConverter {
+pub trait VersionConverter<Db: stash::marker::DatabaseMarker> {
     /// Output of the conversion.
-    type Output: Action;
+    type Output: Action<Db>;
     /// Convert the serialized action from the `old_version` to the `new_version`.
     ///
     /// The `data` for this action was recorded when the action was at `old_version`.
@@ -149,7 +149,11 @@ pub trait VersionConverter {
 /// If the versions don't match it will throw an error.
 pub struct DefaultVersionConverter<T>(PhantomData<T>);
 
-impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
+impl<T, Db> VersionConverter<Db> for DefaultVersionConverter<T>
+where
+    T: Action<Db>,
+    Db: stash::marker::DatabaseMarker,
+{
     type Output = T;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -246,7 +250,9 @@ pub struct ActionDependencyKeys {
 /// Its is recommended to assign this trait to the part of the action which contains the
 /// data required for it to operate on. Execution of the action is defined by the [`Handler`] trait.
 ///
-pub trait Action: Serialize + DeserializeOwned + 'static + Send {
+pub trait Action<Db: stash::marker::DatabaseMarker>:
+    Serialize + DeserializeOwned + 'static + Send
+{
     const TYPE: Type;
     const GROUP: ActionGroup = ActionGroup::default();
     const VERSION: u32;
@@ -260,12 +266,12 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Associated version converter.
     ///
     /// For more details see the [`VersionConverter`] trait.
-    type VersionConverter: VersionConverter<Output = Self>;
+    type VersionConverter: VersionConverter<Db, Output = Self>;
 
     /// Execution handler for this action.
     ///
     /// For more details see the [`Handler`] trait.
-    type Handler: Handler<Action = Self>;
+    type Handler: Handler<Db, Action = Self>;
 
     /// Output returned by executing this action on the remote.
     ///
@@ -300,7 +306,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
 }
 
 #[allow(type_alias_bounds, reason = "This is only used for convenience")]
-pub type LocalOutput<T: Action> = Result<QueuedActionOutput<T>, ActionError<T>>;
+pub type LocalOutput<Db, T: Action<Db>> = Result<QueuedActionOutput<T, Db>, ActionError<T, Db>>;
 
 /// This type exists to make sure that when we attempt to modify local state in the queue executor
 /// we only do so if we have the permission to do so.
@@ -310,7 +316,7 @@ pub type LocalOutput<T: Action> = Result<QueuedActionOutput<T>, ActionError<T>>;
 ///
 /// Database read queries can be made over this type as it implements `Deref<Target=Tether>`.
 /// For writes use the [`transaction()`] method.
-pub struct WriterGuard<'t, Db: stash::marker::DatabaseMarker = stash::marker::UserDb> {
+pub struct WriterGuard<'t, Db: stash::marker::DatabaseMarker> {
     tether: &'t mut Tether<Db>,
     execution_guard: &'t ExecutionGuard,
 }
@@ -379,8 +385,8 @@ pub enum WriterGuardError {
 /// Defines how an action behaves.
 ///
 /// To define the data on which an action operates see the [`Action`] trait.
-pub trait Handler: Send + Sync {
-    type Action: Action<Handler = Self>;
+pub trait Handler<Db: stash::marker::DatabaseMarker>: Send + Sync {
+    type Action: Action<Db>;
 
     /// Apply the `action` to the local database using the given `tx` transaction.
     ///
@@ -392,9 +398,12 @@ pub trait Handler: Send + Sync {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_, Db>,
     ) -> impl Future<
-        Output = Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>,
+        Output = Result<
+            <Self::Action as Action<Db>>::LocalOutput,
+            <Self::Action as Action<Db>>::Error,
+        >,
     > + Send;
 
     /// Revert the `action` from the local database using the given `tx` transaction.
@@ -406,8 +415,8 @@ pub trait Handler: Send + Sync {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
-        tx: &Bond,
-    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
+        tx: &Bond<'_, Db>,
+    ) -> impl Future<Output = Result<(), <Self::Action as Action<Db>>::Error>> + Send;
 
     /// Apply the `action` on the server.
     ///
@@ -423,9 +432,12 @@ pub trait Handler: Send + Sync {
         &self,
         this_id: ActionId,
         action: &mut Self::Action,
-        writer_guard: WriterGuard<'_>,
+        writer_guard: WriterGuard<'_, Db>,
     ) -> impl Future<
-        Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
+        Output = Result<
+            <Self::Action as Action<Db>>::RemoteOutput,
+            <Self::Action as Action<Db>>::Error,
+        >,
     > + Send;
 
     /// Rebase local changes over the current state of the cached data.
@@ -442,8 +454,8 @@ pub trait Handler: Send + Sync {
         this_id: ActionId,
         action: &mut Self::Action,
         change_set: &RebaseChangeSet,
-        tx: &Bond<'_>,
-    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
+        tx: &Bond<'_, Db>,
+    ) -> impl Future<Output = Result<(), <Self::Action as Action<Db>>::Error>> + Send;
 }
 
 /// Identifier for an action that has been queued.
@@ -735,27 +747,39 @@ pub enum FactoryError {
 }
 
 pub type FactoryResult<T> = Result<T, FactoryError>;
-pub(crate) type DecodedAction = (Box<dyn ErasedQueuedAction>, Arc<QueuedMetadata>);
+pub(crate) type DecodedAction<Db> = (Box<dyn ErasedQueuedAction<Db>>, Arc<QueuedMetadata>);
 
 /// A Factory pattern implementation for [`Action`]s which are stored on the [`Queue`](crate::queue::Queue).
 ///
 /// When action are stored on the queue, their state is serialized into the database. In order to
 /// be able to decode an execute those actions they need to be registered with a factory instance.
 ///
-#[derive(Default)]
-pub struct Factory {
-    actions: HashMap<String, ActionFactory>,
+pub struct Factory<Db: stash::marker::DatabaseMarker> {
+    actions: HashMap<String, ActionFactory<Db>>,
 }
 
-impl Factory {
+impl<Db: stash::marker::DatabaseMarker> Default for Factory<Db> {
+    fn default() -> Self {
+        Self {
+            actions: HashMap::new(),
+        }
+    }
+}
+
+impl<Db: stash::marker::DatabaseMarker> Factory<Db> {
     #[must_use]
-    pub fn handler<T: Action>(&self) -> Option<Arc<T::Handler>> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn handler<T: Action<Db>>(&self) -> Option<Arc<T::Handler>> {
         self.actions
             .get(T::TYPE.0)
             .and_then(|action| Arc::downcast(action.handler.clone()).ok())
     }
 
-    pub fn register<T: Action>(&mut self, handler: T::Handler) -> FactoryResult<()> {
+    pub fn register<T: Action<Db>>(&mut self, handler: T::Handler) -> FactoryResult<()> {
         match self.actions.entry(T::TYPE.to_string()) {
             Entry::Occupied(_) => Err(FactoryError::AlreadyRegistered(T::TYPE)),
 
@@ -766,7 +790,7 @@ impl Factory {
                 let decoder = Box::new({
                     let handler = handler.clone();
 
-                    move |stored_action: StoredAction| {
+                    move |stored_action: StoredAction<Db>| {
                         let action: T = T::VersionConverter::convert(
                             stored_action.version,
                             T::VERSION,
@@ -781,7 +805,7 @@ impl Factory {
                                 id,
                                 action,
                                 handler: handler.clone(),
-                            }) as Box<dyn ErasedQueuedAction>,
+                            }) as Box<dyn ErasedQueuedAction<Db>>,
                             Arc::new(meta),
                         ))
                     }
@@ -793,14 +817,14 @@ impl Factory {
             }
         }
     }
-    pub fn register_or_replace<T: Action>(&mut self, handler: T::Handler) {
+    pub fn register_or_replace<T: Action<Db>>(&mut self, handler: T::Handler) {
         let handler = Arc::new(handler);
 
         #[allow(trivial_casts, reason = "false-positive")]
         let decoder = Box::new({
             let handler = handler.clone();
 
-            move |stored_action: StoredAction| {
+            move |stored_action: StoredAction<Db>| {
                 let action: T = T::VersionConverter::convert(
                     stored_action.version,
                     T::VERSION,
@@ -815,7 +839,7 @@ impl Factory {
                         id,
                         action,
                         handler: handler.clone(),
-                    }) as Box<dyn ErasedQueuedAction>,
+                    }) as Box<dyn ErasedQueuedAction<Db>>,
                     Arc::new(meta),
                 ))
             }
@@ -825,7 +849,7 @@ impl Factory {
             .insert(T::TYPE.to_string(), ActionFactory { decoder, handler });
     }
 
-    pub(crate) fn decode(&self, action: StoredAction) -> FactoryResult<DecodedAction> {
+    pub(crate) fn decode(&self, action: StoredAction<Db>) -> FactoryResult<DecodedAction<Db>> {
         let Some(factory) = self.actions.get(&action.action_type) else {
             return Err(FactoryError::UnknownType(
                 action.id.unwrap(),
@@ -837,8 +861,8 @@ impl Factory {
     }
 }
 
-struct ActionFactory {
-    decoder: Box<dyn Fn(StoredAction) -> FactoryResult<DecodedAction> + Send + Sync>,
+struct ActionFactory<Db: stash::marker::DatabaseMarker> {
+    decoder: Box<dyn Fn(StoredAction<Db>) -> FactoryResult<DecodedAction<Db>> + Send + Sync>,
     handler: Arc<dyn Any + Send + Sync + 'static>,
 }
 
@@ -863,7 +887,9 @@ impl From<WriterGuardError> for NoopError {
     }
 }
 
-pub(crate) fn serialize<T: Action>(action: &T) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+pub(crate) fn serialize<T: Action<Db>, Db: stash::marker::DatabaseMarker>(
+    action: &T,
+) -> Result<Vec<u8>, rmp_serde::encode::Error> {
     rmp_serde::to_vec(action)
 }
 

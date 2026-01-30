@@ -253,7 +253,7 @@ impl MailSettings {
     }
 
     pub async fn action_update_list_toolbar(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         actions: Vec<MobileAction>,
         is_default: bool,
     ) -> Result<(), AppError> {
@@ -266,7 +266,7 @@ impl MailSettings {
     }
 
     pub async fn action_update_message_toolbar(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         actions: Vec<MobileAction>,
         is_default: bool,
     ) -> Result<(), AppError> {
@@ -279,7 +279,7 @@ impl MailSettings {
     }
 
     pub async fn action_update_conversation_toolbar(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         actions: Vec<MobileAction>,
         is_default: bool,
     ) -> Result<(), AppError> {
@@ -292,7 +292,7 @@ impl MailSettings {
     }
 
     pub async fn action_update_next_message_on_move(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         next_message_on_move: bool,
     ) -> Result<(), AppError> {
         let action = UpdateNextMessageOnMove::new(next_message_on_move);

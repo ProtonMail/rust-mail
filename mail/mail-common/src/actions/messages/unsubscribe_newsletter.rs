@@ -12,6 +12,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use tracing::{debug, warn};
 use url::Url;
@@ -77,7 +78,7 @@ impl UnsubscribeNewsletter {
     }
 }
 
-impl Action for UnsubscribeNewsletter {
+impl Action<UserDb> for UnsubscribeNewsletter {
     const TYPE: Type = Type("unsubscribe_to_newsletter");
     const VERSION: u32 = 1;
     const MAX_RETRIES: Option<u32> = Some(3);
@@ -94,7 +95,7 @@ pub struct UnsubscribeNewsletterHandler {
     pub api: Session,
 }
 
-impl Handler for UnsubscribeNewsletterHandler {
+impl Handler<UserDb> for UnsubscribeNewsletterHandler {
     type Action = UnsubscribeNewsletter;
 
     async fn apply_local(
@@ -102,7 +103,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::set_flags(action.id, MessageFlags::UNSUBSCRIBED, tx).await?;
         Ok(())
     }
@@ -112,7 +113,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Message::unset_flags(action.id, MessageFlags::UNSUBSCRIBED, tx).await?;
         Ok(())
     }
@@ -121,8 +122,11 @@ impl Handler for UnsubscribeNewsletterHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        g: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        g: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         if let Some(url) = &action.request {
             debug!("sending unsubscribe request to {url}");
             // A GET request to the url should be enough
@@ -156,7 +160,7 @@ impl Handler for UnsubscribeNewsletterHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

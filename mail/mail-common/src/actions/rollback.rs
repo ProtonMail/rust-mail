@@ -8,6 +8,7 @@ use proton_action_queue::action::{
 use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_common::actions::dependency_builder::ActionDependencyKeysBuilder;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::stash::Bond;
 use std::sync::Weak;
 
@@ -20,7 +21,7 @@ pub struct RollbackAction {}
 
 const ROLLBACK_BATCH_SIZE: usize = 50;
 
-impl Action for RollbackAction {
+impl Action<UserDb> for RollbackAction {
     const TYPE: Type = Type("item_rollback");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Low;
@@ -42,7 +43,7 @@ pub struct RollbackActionHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for RollbackActionHandler {
+impl Handler<UserDb> for RollbackActionHandler {
     type Action = RollbackAction;
 
     async fn apply_local(
@@ -50,7 +51,10 @@ impl Handler for RollbackActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -59,7 +63,7 @@ impl Handler for RollbackActionHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -67,8 +71,11 @@ impl Handler for RollbackActionHandler {
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        mut writer_guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut writer_guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self
             .ctx
             .upgrade()
@@ -90,7 +97,7 @@ impl Handler for RollbackActionHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

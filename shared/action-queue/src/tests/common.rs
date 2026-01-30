@@ -1,20 +1,25 @@
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
 use crate::queue::ActionRequeueReason;
 use crate::rebase::RebaseChangeSet;
+use stash::marker::DatabaseMarker;
 use stash::stash::{Bond, StashError};
 use std::marker::PhantomData;
 
-pub struct NoopActionHandler<T: Action>(PhantomData<T>);
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub struct TestDb;
+impl DatabaseMarker for TestDb {}
 
-impl<T: Action> Default for NoopActionHandler<T> {
+pub struct NoopActionHandler<T: Action<TestDb>>(PhantomData<T>);
+
+impl<T: Action<TestDb>> Default for NoopActionHandler<T> {
     fn default() -> Self {
         Self(PhantomData)
     }
 }
 
-impl<T> Handler for NoopActionHandler<T>
+impl<T> Handler<TestDb> for NoopActionHandler<T>
 where
-    T: Action<Handler = Self, LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
+    T: Action<TestDb, Handler = Self, LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
 {
     type Action = T;
 
@@ -22,16 +27,16 @@ where
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
-    ) -> Result<<T as Action>::LocalOutput, T::Error> {
-        Ok(<T as Action>::LocalOutput::default())
+        _: &Bond<'_, TestDb>,
+    ) -> Result<<T as Action<TestDb>>::LocalOutput, T::Error> {
+        Ok(<T as Action<TestDb>>::LocalOutput::default())
     }
 
     async fn revert_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond<'_>,
+        _: &Bond<'_, TestDb>,
     ) -> Result<(), T::Error> {
         Ok(())
     }
@@ -40,8 +45,8 @@ where
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard<'_>,
-    ) -> Result<<T as Action>::RemoteOutput, T::Error> {
+        _: WriterGuard<'_, TestDb>,
+    ) -> Result<<T as Action<TestDb>>::RemoteOutput, T::Error> {
         Ok(T::RemoteOutput::default())
     }
 
@@ -50,7 +55,7 @@ where
         _: ActionId,
         _: &mut Self::Action,
         _: &RebaseChangeSet,
-        _: &Bond<'_>,
+        _: &Bond<'_, TestDb>,
     ) -> Result<(), T::Error> {
         Ok(())
     }

@@ -27,6 +27,7 @@ use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::{Context, anyhow};
 use indoc::formatdoc;
+use proton_action_queue::action::Action;
 use proton_action_queue::action::{
     self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, ActionId, FactoryError, Handler,
     WriterGuard, WriterGuardError,
@@ -125,15 +126,16 @@ impl From<CoreActionError> for MailActionError {
 }
 
 pub(crate) fn register_actions(
-    queue: &Queue,
+    queue: &Queue<UserDb>,
     origin: Origin,
     ctx: &Weak<MailUserContext>,
     api: &Session,
     http_client: &reqwest::Client,
 ) {
-    fn reg<T>(queue: &Queue, handler: T)
+    fn reg<T>(queue: &Queue<UserDb>, handler: T)
     where
-        T: Handler,
+        T: Handler<UserDb>,
+        T::Action: Action<UserDb, Handler = T>,
     {
         if let Err(e) = queue.register::<T::Action>(handler) {
             match e {
@@ -148,9 +150,10 @@ pub(crate) fn register_actions(
         }
     }
 
-    fn replace<T>(queue: &Queue, handler: T)
+    fn replace<T>(queue: &Queue<UserDb>, handler: T)
     where
-        T: Handler,
+        T: Handler<UserDb>,
+        T::Action: Action<UserDb, Handler = T>,
     {
         queue.register_or_replace::<T::Action>(handler);
     }
@@ -954,7 +957,7 @@ where
     async fn apply_remote(
         &self,
         api: &Session,
-        mut guard: WriterGuard<'_>,
+        mut guard: WriterGuard<'_, UserDb>,
     ) -> Result<(), MailActionError> {
         //TODO: handle revert
         let Some(dest_label) = self.destination else {
@@ -1400,7 +1403,7 @@ where
     async fn apply_remote(
         &self,
         api: &Session,
-        mut guard: WriterGuard<'_>,
+        mut guard: WriterGuard<'_, UserDb>,
     ) -> Result<(), MailActionError> {
         let (add, remove) = self.segregate_label();
 
@@ -1589,7 +1592,7 @@ pub enum Undo {
 }
 
 impl Undo {
-    pub async fn undo(self, queue: &Queue, tether: &mut Tether) -> Result<(), AppError> {
+    pub async fn undo(self, queue: &Queue<UserDb>, tether: &mut Tether) -> Result<(), AppError> {
         tracing::info!("undoing!");
         match self {
             Undo::MessagesLabelAs(u) => u.undo(queue, tether).await,

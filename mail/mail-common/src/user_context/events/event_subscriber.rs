@@ -17,6 +17,7 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::LabelError;
 use proton_event_loop::RefreshFlag;
+use stash::UserDb;
 use stash::orm::Model;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
@@ -285,7 +286,8 @@ impl MailUserContext {
     pub async fn refresh_action(
         &self,
         refresh: impl Into<Refresh>,
-    ) -> Result<QueuedActionOutput<ActionRefresh>, QueueActionError<ActionRefresh>> {
+    ) -> Result<QueuedActionOutput<ActionRefresh, UserDb>, QueueActionError<ActionRefresh, UserDb>>
+    {
         self.action_queue()
             .queue_action(ActionRefresh::new(refresh.into()))
             .await

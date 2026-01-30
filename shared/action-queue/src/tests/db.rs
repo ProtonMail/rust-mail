@@ -3,10 +3,9 @@ use crate::action::{
     ActionGroup, DefaultVersionConverter, MetadataBuilder, Type, WriterGuardError,
 };
 use crate::queue::ActionRequeueReason;
-use crate::tests::common::NoopActionHandler;
+use crate::tests::common::{NoopActionHandler, TestDb};
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
-use stash::UserDb;
 use stash::stash::StashConfiguration;
 use stash::{orm::Model, stash::Stash};
 use tracing::subscriber::set_global_default;
@@ -50,7 +49,7 @@ impl From<WriterGuardError> for Error {
     }
 }
 
-impl Action for TestAction {
+impl Action<TestDb> for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
 
@@ -178,7 +177,7 @@ async fn action_execution_lock() {
         .await
         .unwrap();
 
-    conn.tx::<_, _, StashError>(async |tx: &Bond<'_>| {
+    conn.tx::<_, _, StashError>(async |tx: &Bond<'_, TestDb>| {
         let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
             .await
             .unwrap()
@@ -662,7 +661,7 @@ async fn rebase_action_id_order() {
     );
 }
 
-async fn new_test_connection() -> Stash<UserDb> {
+async fn new_test_connection() -> Stash<TestDb> {
     _ = set_global_default(
         registry()
             .with(EnvFilter::new("debug"))

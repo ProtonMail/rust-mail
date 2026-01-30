@@ -8,6 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::rebase::RebaseChangeSet;
 use serde::{self, Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::sync::Weak;
@@ -24,7 +25,7 @@ impl Prefetch {
     }
 }
 
-impl Action for Prefetch {
+impl Action<UserDb> for Prefetch {
     const TYPE: Type = Type("prefetch_message");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Lowest;
@@ -45,7 +46,7 @@ pub struct PrefetchHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for PrefetchHandler {
+impl Handler<UserDb> for PrefetchHandler {
     type Action = Prefetch;
 
     async fn apply_local(
@@ -53,7 +54,10 @@ impl Handler for PrefetchHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         Ok(())
     }
 
@@ -62,7 +66,7 @@ impl Handler for PrefetchHandler {
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 
@@ -70,8 +74,11 @@ impl Handler for PrefetchHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         tracing::trace!(
             "Prefetching message {local_id} body",
             local_id = action.local_id
@@ -137,7 +144,7 @@ impl Handler for PrefetchHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

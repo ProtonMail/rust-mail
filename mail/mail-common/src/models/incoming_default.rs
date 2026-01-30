@@ -236,22 +236,22 @@ impl IncomingDefault {
     }
 
     pub async fn action_block(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         email: PrivateEmail,
-    ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
+    ) -> Result<QueuedActionOutput<Block, UserDb>, QueueActionError<Block, UserDb>> {
         let action = Block::new(email);
         queue.queue_action(action).await
     }
 
     pub async fn action_unblock(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         email: PrivateEmail,
-    ) -> Result<QueuedActionOutput<Unblock>, QueueActionError<Unblock>> {
+    ) -> Result<QueuedActionOutput<Unblock, UserDb>, QueueActionError<Unblock, UserDb>> {
         let action = Unblock::new(email);
         queue.queue_action(action).await
     }
 
-    pub async fn action_resync(queue: &Queue) {
+    pub async fn action_resync(queue: &Queue<UserDb>) {
         if let Err(e) = queue.queue_action(SyncIncomingDefaults).await {
             if cfg!(debug_assertions) {
                 panic!("apply_local can't fail {e}");

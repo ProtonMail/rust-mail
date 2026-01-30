@@ -490,9 +490,10 @@ impl Contact {
     }
 
     pub async fn action_delete(
-        queue: &Queue,
+        queue: &Queue<UserDb>,
         contact_ids: Vec<LocalContactId>,
-    ) -> Result<QueuedActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
+    ) -> Result<QueuedActionOutput<ContactsDelete, UserDb>, ActionError<ContactsDelete, UserDb>>
+    {
         let action = ContactsDelete::new(contact_ids);
         queue.queue_action(action).await
     }

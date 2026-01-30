@@ -9,6 +9,7 @@ use proton_action_queue::rebase::RebaseChangeSet;
 use proton_core_api::session::Session;
 use proton_mail_api::services::proton::{ProtonMail, request_data::PutNextMessageOnMoveRequest};
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, RunTransaction};
 
@@ -27,7 +28,7 @@ impl UpdateNextMessageOnMove {
     }
 }
 
-impl Action for UpdateNextMessageOnMove {
+impl Action<UserDb> for UpdateNextMessageOnMove {
     const TYPE: Type = Type("update_next_message_on_move");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
@@ -41,7 +42,7 @@ pub struct UpdateNextMessageOnMoveHandler {
     pub api: Session,
 }
 
-impl Handler for UpdateNextMessageOnMoveHandler {
+impl Handler<UserDb> for UpdateNextMessageOnMoveHandler {
     type Action = UpdateNextMessageOnMove;
 
     async fn apply_local(
@@ -49,7 +50,7 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut mail_settings = match MailSettings::get(bond.tether()).await? {
             Some(ms) => ms,
             None => {
@@ -75,7 +76,7 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         _: ActionId,
         action: &mut Self::Action,
         bond: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let mut mail_settings = match MailSettings::get(bond.tether()).await? {
             Some(ms) => ms,
             None => {
@@ -93,8 +94,11 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        _guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        _guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let request = PutNextMessageOnMoveRequest {
             next_message_on_move: action.next_message_on_move,
         };
@@ -113,7 +117,7 @@ impl Handler for UpdateNextMessageOnMoveHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }

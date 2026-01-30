@@ -89,7 +89,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
@@ -106,7 +106,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -119,7 +119,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -132,7 +132,7 @@ impl RollbackItem {
         api: &Session,
         tx: &mut impl RunTransaction,
         batch: I,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
@@ -190,7 +190,7 @@ impl RollbackItem {
         api: &Session,
         tx_runner: &mut T,
         batch: Option<usize>,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<(), MailContextError> {
         let items: Vec<H::RemoteId> =
             Self::find_remote_ids_by_kind(H::item_type(), tx_runner.tether())

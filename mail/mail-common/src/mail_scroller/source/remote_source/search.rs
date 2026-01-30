@@ -18,6 +18,7 @@ use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
+use stash::UserDb;
 use stash::{
     orm::Model,
     stash::{StashError, Tether},
@@ -163,7 +164,7 @@ impl SearchScrollerSource {
         remote_label_id: LabelId,
         search: SearchOptions,
         page_size: usize,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Vec<Message>, MailContextError> {
         info!("Syncing first page in {remote_label_id:?}");
 
@@ -207,7 +208,7 @@ impl SearchScrollerSource {
         last_time: UnixTimestamp,
         search: SearchOptions,
         page_size: usize,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Vec<Message>, MailContextError> {
         info!(
             "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
@@ -253,7 +254,7 @@ impl SearchScrollerSource {
         api_messages: Vec<ApiMessageMetadata>,
         api: &Session,
         tether: &mut Tether,
-        queue: &Queue,
+        queue: &Queue<UserDb>,
     ) -> Result<Vec<Message>, MailContextError> {
         if api_messages.is_empty() {
             return Ok(vec![]);

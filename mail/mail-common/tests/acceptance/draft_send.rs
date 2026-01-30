@@ -51,6 +51,7 @@ use proton_mail_common::test_utils::messages::{
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use secrecy::ExposeSecret;
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 use std::sync::Arc;
@@ -487,7 +488,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
     };
 
     let schedule_send_error = schedule_send_error
-        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .as_action_error::<proton_mail_common::actions::draft::Send, UserDb>()
         .unwrap();
 
     assert!(matches!(
@@ -531,7 +532,7 @@ async fn send_fails_if_recipient_is_not_valid() {
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .as_action_error::<proton_mail_common::actions::draft::Send, UserDb>()
         .unwrap();
 
     assert!(matches!(
@@ -548,7 +549,7 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetAddressMissing as u32).await;
 
     let err = err
-        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .as_action_error::<proton_mail_common::actions::draft::Send, UserDb>()
         .unwrap();
 
     assert!(matches!(

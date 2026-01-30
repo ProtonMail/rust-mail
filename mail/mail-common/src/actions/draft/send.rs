@@ -32,6 +32,7 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
+use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 use std::collections::HashSet;
@@ -104,7 +105,7 @@ impl Send {
 pub type UndoTimestamp = UnixTimestamp;
 
 const SEND_ACTION_VERSION: u32 = 2;
-impl Action for Send {
+impl Action<UserDb> for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = SEND_ACTION_VERSION;
     const PRIORITY: Priority = Priority::High;
@@ -119,7 +120,7 @@ impl Action for Send {
 
 pub struct SendVersionConverter;
 
-impl VersionConverter for SendVersionConverter {
+impl VersionConverter<UserDb> for SendVersionConverter {
     type Output = Send;
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
@@ -145,7 +146,7 @@ pub struct SendHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl Handler for SendHandler {
+impl Handler<UserDb> for SendHandler {
     type Action = Send;
 
     async fn apply_local(
@@ -153,7 +154,10 @@ impl Handler for SendHandler {
         action_id: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::LocalOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         // Get recipient emails.
         if action.recipients.is_empty() {
             error!("No recipients associated with the current draft");
@@ -247,7 +251,7 @@ impl Handler for SendHandler {
         _: ActionId,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
@@ -291,8 +295,11 @@ impl Handler for SendHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        mut guard: WriterGuard<'_, UserDb>,
+    ) -> Result<
+        <Self::Action as Action<UserDb>>::RemoteOutput,
+        <Self::Action as Action<UserDb>>::Error,
+    > {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
         let r = Send::apply_remote_impl(&ctx, action, &mut guard).await;
 
@@ -309,7 +316,7 @@ impl Handler for SendHandler {
         _: &mut Self::Action,
         _: &RebaseChangeSet,
         _: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action<UserDb>>::Error> {
         Ok(())
     }
 }
@@ -320,8 +327,8 @@ impl Send {
     async fn apply_remote_impl(
         ctx: &MailUserContext,
         action: &mut Self,
-        guard: &mut WriterGuard<'_>,
-    ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
+        guard: &mut WriterGuard<'_, UserDb>,
+    ) -> Result<<Self as Action<UserDb>>::RemoteOutput, <Self as Action<UserDb>>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let session_encryption_key = ctx.core_context().get_encryption_key()?;
 
@@ -485,7 +492,7 @@ impl Send {
             Ok(response) => {
                 // Update conversation
                 guard
-                    .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                    .tx::<_, _, <Self as Action<UserDb>>::Error>(async |tx| {
                         info!("Message sent/scheduled");
                         let mut conversation: Conversation = response.conversation.into();
 
@@ -567,7 +574,7 @@ impl Send {
                             // When the message is already sent, we just need to delete the
                             // metadata. The event loop will take care of the rest.
                             guard
-                                .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                                .tx::<_, _, <Self as Action<UserDb>>::Error>(async |tx| {
                                     Ok(on_already_sent(
                                         action.metadata_id,
                                         Some(remote_message_id.clone()),
@@ -617,8 +624,8 @@ impl Send {
 // Simple wrapper function to catch errors
 async fn save_send_status(
     action: &Send,
-    guard: &mut WriterGuard<'_>,
-    status: &Result<<Send as Action>::RemoteOutput, MailContextError>,
+    guard: &mut WriterGuard<'_, UserDb>,
+    status: &Result<<Send as Action<UserDb>>::RemoteOutput, MailContextError>,
 ) -> Result<(), WriterGuardError> {
     let origin = if action.is_scheduled() {
         DraftSendResultOrigin::ScheduleSend
