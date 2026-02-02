@@ -117,7 +117,7 @@ in
       binary = "bash";
 
       exec = ''
-        xcodes install 16.3
+        xcodes install 26.2
       '';
     };
 
