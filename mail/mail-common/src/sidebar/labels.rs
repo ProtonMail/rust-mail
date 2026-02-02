@@ -53,8 +53,6 @@ impl Sidebar {
             labels.push(snoozed.label);
         }
 
-        labels.push(self.get_label(tether, LabelId::starred()).await?);
-
         if settings.show_moved == ShowMoved::KeepInSent
             || settings.show_moved == ShowMoved::KeepBoth
         {
@@ -63,6 +61,7 @@ impl Sidebar {
             labels.push(self.get_label(tether, LabelId::sent()).await?);
         }
 
+        labels.push(self.get_label(tether, LabelId::starred()).await?);
         labels.push(self.get_label(tether, LabelId::spam()).await?);
         labels.push(self.get_label(tether, LabelId::archive()).await?);
         labels.push(self.get_label(tether, LabelId::trash()).await?);

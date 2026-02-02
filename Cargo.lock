@@ -2038,7 +2038,7 @@ dependencies = [
 [[package]]
 name = "email_address"
 version = "0.2.9"
-source = "git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat%2Fallow-long-local-parts#472383f643da5166ebf41a9f9c2f8a436edc16e2"
+source = "git+https://github.com/ProtonMail/rust-email_address.git?branch=feat%2Fallow-long-local-parts#472383f643da5166ebf41a9f9c2f8a436edc16e2"
 dependencies = [
  "serde",
 ]
@@ -2675,8 +2675,7 @@ dependencies = [
 [[package]]
 name = "gopenpgp-sys"
 version = "0.3.3"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "e81404bf5710b9075990639b5349491b5d476b59b83950d02d939cc354ad4ec3"
+source = "git+https://github.com/ProtonMail/proton-crypto-rs.git?rev=33d22de54c578408108f580d6cafae06f656da9a#33d22de54c578408108f580d6cafae06f656da9a"
 dependencies = [
  "base64",
  "bindgen 0.72.1",
@@ -3678,7 +3677,7 @@ dependencies = [
 [[package]]
 name = "lightningcss"
 version = "1.0.0-alpha.66"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "ahash",
  "bitflags 2.9.4",
@@ -3700,7 +3699,7 @@ dependencies = [
 [[package]]
 name = "lightningcss-derive"
 version = "1.0.0-alpha.43"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -3972,7 +3971,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.7.1"
-source = "git+https://gitlab.protontech.ch/rust/inbox/muon.git?rev=4e410705f7becc18f1621eccc111211bc6c25345#4e410705f7becc18f1621eccc111211bc6c25345"
+source = "git+https://gitlab.protontech.ch/rust/inbox/muon.git?rev=abb717669f22948e6eccd8c0ea4ea00e58585895#abb717669f22948e6eccd8c0ea4ea00e58585895"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4028,8 +4027,8 @@ dependencies = [
 [[package]]
 name = "muon-proc"
 version = "0.5.0"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "f460da90475d8acb9f3e5071e49324b890b27ea80fc71288dc56dfe1ff6f396a"
+source = "sparse+https://rust-registry.proton.me/index/"
+checksum = "b3a4cd79ae857be25a6d8f2d5f4d897f76e1733c57e609adc4341e06955acd81"
 dependencies = [
  "cfg-if",
  "proc-macro2",
@@ -4560,7 +4559,7 @@ dependencies = [
 [[package]]
 name = "parcel_selectors"
 version = "0.28.2"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "bitflags 2.9.4",
  "cssparser 0.33.0",
@@ -5449,8 +5448,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto"
 version = "0.7.1"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "c7dc0a26d77810cac1ccfbc7d62cbdbcc0bb858dc09b2beeeb6d755938b201b8"
+source = "git+https://github.com/ProtonMail/proton-crypto-rs.git?rev=33d22de54c578408108f580d6cafae06f656da9a#33d22de54c578408108f580d6cafae06f656da9a"
 dependencies = [
  "gopenpgp-sys",
  "hex",
@@ -5465,8 +5463,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto-account"
 version = "0.12.3"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "85c1f08882ab468facdd18a967653de2f5318b59f8e915ce186013c319b2580f"
+source = "git+https://github.com/ProtonMail/proton-crypto-rs.git?rev=33d22de54c578408108f580d6cafae06f656da9a#33d22de54c578408108f580d6cafae06f656da9a"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
@@ -5549,7 +5546,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto-subtle"
 version = "0.1.0"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+source = "sparse+https://rust-registry.proton.me/index/"
 checksum = "0590198ea347ad60b41ec87b1bdb7575e6a75799816ec93960db20d70f5a3f61"
 dependencies = [
  "aes-gcm",
@@ -5588,7 +5585,7 @@ dependencies = [
 [[package]]
 name = "proton-foundation-search"
 version = "0.5.1-preview"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+source = "sparse+https://rust-registry.proton.me/index/"
 checksum = "d3d0c9f98e943cd0109ac0b10621baad2970ab552a487a64965c2e246106f231"
 dependencies = [
  "arc-swap",
@@ -6021,8 +6018,7 @@ dependencies = [
 [[package]]
 name = "proton-srp"
 version = "0.7.1"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "2be7a723cbcf580757fb53e7152c70336def958cdd0436a601a06c52ed233a3c"
+source = "git+https://github.com/ProtonMail/proton-crypto-rs.git?rev=33d22de54c578408108f580d6cafae06f656da9a#33d22de54c578408108f580d6cafae06f656da9a"
 dependencies = [
  "base64",
  "bcrypt",

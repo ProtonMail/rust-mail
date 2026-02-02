@@ -52,6 +52,11 @@ path = "tests/recipient.rs"
 name = "skl"
 path = "tests/skl.rs"
 
+[dependencies]
+serde_json = "1.0.137"
+serde_repr = "0.1"
+serde_with = "3.12.0"
+
 [dependencies.base64]
 version = "0.22"
 
@@ -68,7 +73,8 @@ version = "0.4.3"
 
 [dependencies.proton-crypto]
 version = "0.7.1"
-registry-index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+registry = "proton"
+path = "../proton-crypto"
 
 [dependencies.rusqlite]
 version = "0.32.1"
@@ -84,15 +90,6 @@ optional = true
 [dependencies.serde]
 version = "1"
 features = ["derive"]
-
-[dependencies.serde_json]
-version = "1.0.137"
-
-[dependencies.serde_repr]
-version = "0.1"
-
-[dependencies.serde_with]
-version = "3.12.0"
 
 [dependencies.thiserror]
 version = "1"

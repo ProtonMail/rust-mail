@@ -15,6 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stash -> Stash<UserDb>
 - Add AccountDb marker to account related models
 - Make database attribute required
+- Make action-queue database marker agnostic
+
+
+## [mail-uniffi-v0.161.22] - 2026-02-02
+
+### Features
+
+- Change system label order in sidebar; Sent > Starred
+
+
+## [mail-uniffi-v0.161.21] - 2026-01-30
+
+### Features
+
+- [ET-4315] Add order to LabelAsAction
+
+### Fixes
+
+- Do not count links to trackers and fix CID vulnerability
 
 
 ## [mail-uniffi-v0.161.19] - 2026-01-28

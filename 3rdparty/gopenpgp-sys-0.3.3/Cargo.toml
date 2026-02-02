@@ -38,5 +38,5 @@ version = "0.4.3"
 version = "1.7.0"
 features = ["zeroize_derive"]
 
-[build-dependencies.bindgen]
-version = "0.72"
+[build-dependencies]
+bindgen = "0.72"
