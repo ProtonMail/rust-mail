@@ -5,7 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.161.21] - 2026-01-28
+## [mail-uniffi-v0.161.22] - 2026-02-02
+
+### Features
+
+- Change system label order in sidebar; Sent > Starred
+
+
+## [mail-uniffi-v0.161.21] - 2026-01-30
 
 ### Features
 
