@@ -15,13 +15,14 @@ name = "muon-proc"
 version = "0.5.0"
 authors = ["James Houlahan <james.houlahan@proton.ch>"]
 build = false
+autolib = false
 autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-documentation = "https://protonvpn.gitlab-pages.protontech.ch/rust/muon"
-readme = false
-repository = "https://gitlab.protontech.ch/ProtonVPN/rust/muon"
+documentation = "https://protonvpn.gitlab-pages.protontech.ch/rust/muon-proc"
+readme = "README.md"
+repository = "https://gitlab.protontech.ch/ProtonVPN/rust/muon-proc"
 
 [lib]
 name = "muon_proc"
@@ -47,15 +48,6 @@ all = "deny"
 [lints.rust]
 missing_debug_implementations = "deny"
 missing_docs = "deny"
-
-[lints.rust.unexpected_cfgs]
-level = "deny"
-priority = 0
-check-cfg = [
-    "cfg(ci)",
-    "cfg(crypto_dll)",
-    "cfg(crypto_vcs)",
-]
 
 [lints.rustdoc]
 broken_intra_doc_links = "deny"

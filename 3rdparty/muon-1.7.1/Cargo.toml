@@ -280,8 +280,8 @@ version = "0.4"
 optional = true
 
 [dependencies.proton-srp]
-version = "0.7"
-registry = "proton"
+git = "https://github.com/ProtonMail/proton-crypto-rs.git"
+rev = "33d22de54c578408108f580d6cafae06f656da9a"
 
 [dependencies.regex]
 version = "1.10"

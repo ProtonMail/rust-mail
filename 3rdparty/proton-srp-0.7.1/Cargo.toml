@@ -44,11 +44,11 @@ path = "tests/pmhash.rs"
 name = "srp"
 path = "tests/srp.rs"
 
+[dependencies]
+bcrypt = "0.17.1"
+
 [dependencies.base64]
 version = "0.22"
-
-[dependencies.bcrypt]
-version = "0.17.1"
 
 [dependencies.crypto-bigint]
 version = "0.5.5"
