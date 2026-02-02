@@ -2016,7 +2016,7 @@ dependencies = [
 [[package]]
 name = "email_address"
 version = "0.2.9"
-source = "git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat%2Fallow-long-local-parts#472383f643da5166ebf41a9f9c2f8a436edc16e2"
+source = "git+https://github.com/ProtonMail/rust-email_address.git?branch=feat%2Fallow-long-local-parts#472383f643da5166ebf41a9f9c2f8a436edc16e2"
 dependencies = [
  "serde",
 ]
@@ -3597,7 +3597,7 @@ dependencies = [
 [[package]]
 name = "lightningcss"
 version = "1.0.0-alpha.66"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "ahash",
  "bitflags 2.9.4",
@@ -3619,7 +3619,7 @@ dependencies = [
 [[package]]
 name = "lightningcss-derive"
 version = "1.0.0-alpha.43"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -4473,7 +4473,7 @@ dependencies = [
 [[package]]
 name = "parcel_selectors"
 version = "0.28.2"
-source = "git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
+source = "git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0#ab7380af1465412bcaeb403d52cfa108165346e0"
 dependencies = [
  "bitflags 2.9.4",
  "cssparser 0.33.0",

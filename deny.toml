@@ -229,8 +229,8 @@ allow-registry = [
 # List of URLs for allowed Git repositories
 allow-git = [
   "git+https://gitlab.protontech.ch/rust/inbox/muon.git",
-  "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12",
-  "git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat%2Fallow-long-local-parts",
+  "git+https://github.com/ProtonMail/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12",
+  "git+https://github.com/ProtonMail/rust-email_address.git?branch=feat%2Fallow-long-local-parts",
   "git+https://github.com/ProtonMail/proton-crypto-rs.git?rev=33d22de54c578408108f580d6cafae06f656da9a",
 ]
 

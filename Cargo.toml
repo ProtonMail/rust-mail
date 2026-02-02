@@ -155,7 +155,7 @@ zeroizing-alloc = "0.1.0"
 [workspace.dependencies.email_address]
 version = "0.2.9"
 features = ["serde"]
-git = "https://github.com/LBeernaertProton/rust-email_address.git"
+git = "https://github.com/ProtonMail/rust-email_address.git"
 branch = "feat/allow-long-local-parts"
 
 [workspace.dependencies.proton-api-utils]
