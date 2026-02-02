@@ -7,8 +7,8 @@ index = "sparse+https://rust-registry.proton.me/index/"
 [source.crates-io]
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/LBeernaertProton/rust-email_address.git?branch=feat/allow-long-local-parts"]
-git = "https://github.com/LBeernaertProton/rust-email_address.git"
+[source."git+https://github.com/ProtonMail/rust-email_address.git?branch=feat/allow-long-local-parts"]
+git = "https://github.com/ProtonMail/rust-email_address.git"
 branch = "feat/allow-long-local-parts"
 replace-with = "vendored-sources"
 
@@ -17,8 +17,8 @@ git = "https://github.com/ProtonMail/proton-crypto-rs.git"
 rev = "33d22de54c578408108f580d6cafae06f656da9a"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/frondeus/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0"]
-git = "https://github.com/frondeus/lightningcss"
+[source."git+https://github.com/ProtonMail/lightningcss?rev=ab7380af1465412bcaeb403d52cfa108165346e0"]
+git = "https://github.com/ProtonMail/lightningcss"
 rev = "ab7380af1465412bcaeb403d52cfa108165346e0"
 replace-with = "vendored-sources"
 
