@@ -273,7 +273,7 @@ pub async fn process_target_device_qr_code(
         .send()
         .await
     {
-        ForkFlowResult::Success(_client, _selector) => {
+        ForkFlowResult::Success(_client, _selector, _) => {
             observability.record(QrLoginPushFork {
                 status: ApiServiceObservabilityResponse::Success,
             });

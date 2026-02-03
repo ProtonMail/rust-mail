@@ -236,12 +236,13 @@ impl MailUserSession {
         &self,
         platform: String,
         product: String,
-    ) -> Result<String, UserSessionError> {
+    ) -> Result<crate::mail::datatypes::Fork, UserSessionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.session()
                 .fork(platform, product)
                 .await
+                .map(Into::into)
                 .map_err(RealProtonMailError::from)
         })
         .await
