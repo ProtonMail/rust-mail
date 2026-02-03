@@ -2175,3 +2175,165 @@ async fn draft_reply_handles_conversation_id_change_multiple_times_without_destr
     draft.save().await.unwrap();
     user_ctx.execute_all_send_actions().await.unwrap();
 }
+
+#[tokio::test]
+async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_holder_to_existing_conversation()
+ {
+    // ch anging the subject of a message in a reply can lead to reply with
+    // a new conversation id that is not known yet. It's also possible for to enter
+    // a case where the converastion is swapped to a conversation we already have and
+    // backend then deletes the placeholder, resulting in loss of the drat metadata.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+
+    let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
+    params.addresses[0].status = AddressStatus::Disabled;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message_with_attachments();
+
+    let time = UnixTimestamp::now().saturating_add(100);
+    let expiration_time = UnixTimestamp::now().saturating_add(2000);
+
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+    remote_existing_message.metadata.expiration_time = expiration_time.as_u64();
+    remote_existing_message.metadata.time = time.as_u64();
+    remote_existing_message
+        .metadata
+        .attachments_metadata
+        .clear();
+    remote_existing_message.body.attachments.clear();
+
+    let params = draft_test_params();
+    let message = draft_message();
+
+    let changed_conversation_id = ConversationId::new("surprise!".into());
+
+    ctx.setup_user(params.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+
+    let existing_converation_remote_id = ConversationId::from("already_exists_conv");
+    let mut existing_conversation = Conversation {
+        remote_id: Some(existing_converation_remote_id.clone()),
+        has_messages: true,
+        ..Conversation::test_default()
+    };
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+
+    tether
+        .tx(async |tx| {
+            existing_conversation.save(tx).await?;
+            existing_message.save(tx).await
+        })
+        .await
+        .unwrap();
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+
+    let expected_draft_params = expected_create_reply_draft_params(
+        &existing_message,
+        MimeType::TextHtml,
+        ReplyMode::Sender,
+    );
+
+    let message_with_new_conv_id = {
+        let mut m = message.clone();
+        m.metadata.conversation_id = changed_conversation_id.clone();
+        m
+    };
+
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message_with_new_conv_id,
+        Some(remote_existing_message.metadata.id.clone()),
+        Some(DraftAttachmentKeyPackets::new()),
+    )
+    .await;
+
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        {
+            let mut params = expected_draft_params.clone();
+            params.subject = "foo12345".into();
+            params
+        },
+        {
+            let mut message = message.clone();
+            message.metadata.conversation_id = existing_converation_remote_id.clone();
+            message
+        },
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
+    )
+    .await
+    .unwrap();
+
+    draft.save().await.unwrap();
+
+    let first_conversation_id = draft.conversation_id().await.unwrap().unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
+    let local_changed_conversation_id =
+        Conversation::remote_id_counterpart(changed_conversation_id.clone(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    let second_conversation_id = draft.conversation_id().await.unwrap().unwrap();
+    assert_ne!(first_conversation_id, second_conversation_id);
+    assert_eq!(local_changed_conversation_id, second_conversation_id);
+
+    // change subject again to simulate another conv update.
+    draft.set_subject("foo12345".into()).await.unwrap();
+    draft.save().await.unwrap();
+
+    user_ctx.execute_all_send_actions().await.unwrap();
+    let third_conversation_id = draft.conversation_id().await.unwrap().unwrap();
+    assert_ne!(first_conversation_id, third_conversation_id);
+    assert_eq!(existing_conversation.id(), third_conversation_id);
+
+    // Finally deleting the placeholder should not cause the draft metatadata to expire.
+    tether
+        .tx(async |tx| Conversation::delete_by_id(second_conversation_id, tx).await)
+        .await
+        .unwrap();
+
+    assert!(
+        DraftMetadata::find_by_id(draft.metadata_id, &tether)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}

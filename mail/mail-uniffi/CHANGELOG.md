@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make action-queue database marker agnostic
 
 
+## [mail-uniffi-v0.161.23] - 2026-02-03
+
+### Features
+
+- [ET-5751] Add session id to the forked session
+
+### Fixes
+
+- [ET-5610] Draft was not found error
+
+
 ## [mail-uniffi-v0.161.22] - 2026-02-02
 
 ### Features

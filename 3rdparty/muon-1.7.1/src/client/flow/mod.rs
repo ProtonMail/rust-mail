@@ -317,9 +317,9 @@ impl AuthFlow {
 /// reason.
 #[derive(Debug)]
 pub enum ForkFlowResult {
-    /// Indicates a successful fork flow with the parent session [`Client`] and
-    /// the selector.
-    Success(Client, String),
+    /// Indicates a successful fork flow with the parent session [`Client`],
+    /// the selector, and the session UID.
+    Success(Client, String, Option<String>),
     /// todo
     Failure {
         /// We return the client even if it couldn't accept the fork
@@ -338,6 +338,25 @@ pub struct ForkFlow {
     independent: bool,
     payload: Option<Vec<u8>>,
     code: Option<String>,
+}
+
+/// Extract Session-Id cookie value from response headers
+fn extract_session_uid_from_headers(headers: &crate::http::Headers) -> Option<String> {
+    headers
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .find_map(|cookie_str| {
+            // Parse the cookie string to find Session-Id
+            if cookie_str.starts_with("Session-Id=") {
+                // Extract the value up to the first semicolon
+                let value_part = cookie_str.strip_prefix("Session-Id=")?;
+                let session_uid = value_part.split(';').next()?;
+                Some(session_uid.to_owned())
+            } else {
+                None
+            }
+        })
 }
 
 impl ForkFlow {
@@ -396,10 +415,13 @@ impl ForkFlow {
         // Parse the fork response.
         let res = return_variant_on_error!(res.ok(), self.client, ForkFlowResult::Failure);
 
+        // Extract Session-Id cookie from response headers
+        let session_uid = extract_session_uid_from_headers(res.headers());
+
         let res: auth::v4::sessions::forks::PostRes =
             return_variant_on_error!(res.into_body_json(), self.client, ForkFlowResult::Failure);
 
-        ForkFlowResult::Success(self.client, res.selector)
+        ForkFlowResult::Success(self.client, res.selector, session_uid)
     }
 }
 

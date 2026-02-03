@@ -22,9 +22,9 @@ git = "https://github.com/ProtonMail/lightningcss"
 rev = "ab7380af1465412bcaeb403d52cfa108165346e0"
 replace-with = "vendored-sources"
 
-[source."git+https://gitlab.protontech.ch/rust/inbox/muon.git?rev=abb717669f22948e6eccd8c0ea4ea00e58585895"]
+[source."git+https://gitlab.protontech.ch/rust/inbox/muon.git?rev=2970c71eaa5dd5c1c4f127535870d16155ef46da"]
 git = "https://gitlab.protontech.ch/rust/inbox/muon.git"
-rev = "abb717669f22948e6eccd8c0ea4ea00e58585895"
+rev = "2970c71eaa5dd5c1c4f127535870d16155ef46da"
 replace-with = "vendored-sources"
 
 [source."sparse+https://rust-registry.proton.me/index/"]

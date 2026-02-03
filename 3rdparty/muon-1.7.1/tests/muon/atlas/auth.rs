@@ -159,7 +159,7 @@ async fn test_auth_fork() -> Result<()> {
     };
 
     // Make a fork of the parent session.
-    let ForkFlowResult::Success(c1, selector) =
+    let ForkFlowResult::Success(c1, selector, _session_id) =
         c1.fork("android-mail").payload("foo bar baz").send().await
     else {
         bail!("Failed to fork")

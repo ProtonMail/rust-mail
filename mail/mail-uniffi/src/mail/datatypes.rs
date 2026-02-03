@@ -1312,3 +1312,18 @@ impl From<RealUndo> for Undo {
         Self(Mutex::new(Some(value)))
     }
 }
+
+#[derive(uniffi::Record)]
+pub struct Fork {
+    pub selector: String,
+    pub id: String,
+}
+
+impl From<proton_core_api::session::Fork> for Fork {
+    fn from(value: proton_core_api::session::Fork) -> Self {
+        Self {
+            selector: value.selector,
+            id: value.id,
+        }
+    }
+}

@@ -660,9 +660,14 @@ impl Save {
                     // Certain modifications to a reply, such as changing the subject, will trigger an update where the
                     // message's conversation id is changed. We need to detect this and create a placeholder until we are
                     // done sending to receive the full data from the server.
-                    tracing::debug!("Received new {:?}, contents will only be known after send", new_message.metadata.conversation_id);
-                    if Conversation::find_by_remote_id(new_message.metadata.conversation_id.clone(), bond).await?.is_none() {
-                        tracing::debug!("Creating new placeholder conversation");
+                    tracing::debug!("Received new {:?}", new_message.metadata.conversation_id);
+                    if let Some(replacement_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await?{
+                        tracing::debug!("Conversation exists, patching metadata");
+                        metadata.local_conversation_id = Some(replacement_local_id);
+                        metadata.save(bond).await.inspect_err(|e| error!("Failed to update metadata:{e}"))?;
+                        local_conversation_id = replacement_local_id;
+                    }else {
+                        tracing::debug!("Creating new placeholder, contents will only be known after send");
                         let mut new_conversation = Conversation{
                             local_id: None,
                             remote_id: Some(new_message.metadata.conversation_id.clone()),
