@@ -18,7 +18,7 @@ impl FromStr for Mailto {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let url = Url::from_str(s).map_err(Error::InvalidUrl)?;
 
-        if url.scheme() != "mailto" {
+        if !url.scheme().eq_ignore_ascii_case("mailto") {
             return Err(Error::InvalidScheme(url.scheme().into()));
         }
 
@@ -258,6 +258,17 @@ mod tests {
         },
     };
 
+    const TEST_MIXED_CASE: TestCase = TestCase {
+        given: "Mailto:?Body=hello%20world",
+        expected: || Mailto {
+            to: vec![],
+            cc: vec![],
+            bcc: vec![],
+            subject: None,
+            body: Some("hello world".into()),
+        },
+    };
+
     #[allow(clippy::needless_pass_by_value)]
     #[test_case(TEST_TO)]
     #[test_case(TEST_TO_ENCODED)]
@@ -274,6 +285,7 @@ mod tests {
     #[test_case(TEST_BODY)]
     #[test_case(TEST_SUBJECT_AND_BODY)]
     #[test_case(TEST_EVERYTHING)]
+    #[test_case(TEST_MIXED_CASE)]
     fn from_str(case: TestCase) {
         let actual = Mailto::from_str(case.given).unwrap();
 
