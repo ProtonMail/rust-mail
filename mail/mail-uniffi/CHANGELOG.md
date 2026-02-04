@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.24] - 2026-02-04
+
+### Fixes
+
+- [ET-3853] Order scroller items by MAX(snooze_time, time)
+- [ET-5823] mailto parse scheme case sensitivity
+
+
 ## [mail-uniffi-v0.162.1] - 2026-02-03
 
 ### Changed

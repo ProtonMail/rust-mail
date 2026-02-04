@@ -10,6 +10,7 @@ use proton_mail_api::services::proton::{
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use proton_mail_common::{api_message_meta, datatypes::labels::ScrollOrderField};
+use proton_mail_common::{conv_id, message, msg_id};
 use proton_mail_common::{
     datatypes::ReadFilter,
     models::{Conversation, Message, MessageCounter, MessageScrollData},
@@ -18,11 +19,12 @@ use proton_mail_common::{
     datatypes::SystemLabelId,
     test_utils::{init::Params as TestParams, test_context::MailTestContext},
 };
-use proton_mail_common::{message, msg_id};
 use proton_mail_common::{
     models::LabelExt,
     test_utils::{
-        scroller::{StoreLabeledModelMap, TestScroller, save_single_message, test_messages},
+        scroller::{
+            StoreLabeledModelMap, TestScroller, UNIQUE_CONV_ID, save_single_message, test_messages,
+        },
         test_context::MailUserContextTestExtension,
     },
 };
@@ -30,6 +32,7 @@ use velcro::hash_map;
 
 use proton_mail_common::datatypes::labels::ScrollOrderDir;
 use stash::orm::Model;
+use stash::params;
 use stash::stash::StashError;
 use std::{collections::HashMap, vec};
 use wiremock::{
@@ -816,4 +819,93 @@ pub async fn mock_get_messages_page(
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
+}
+
+/// Verifies the fix using MAX(snooze_time, time) allows fetch_more() to correctly
+/// find new messages with snooze_time=0 during pagination.
+#[tokio::test]
+async fn test_snooze_time_pagination_fix_works() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+
+    let mut messages = vec![];
+
+    // Create 10 snoozed messages
+    for i in 0..10 {
+        messages.push(message!(
+            remote_id: msg_id!(format!("snoozed_{i}")),
+            display_order: (100 + i),
+            time: (1000 + i).into(),
+            snooze_time: (10000 + i).into()
+        ));
+    }
+
+    // Create 5 non-snoozed messages
+    for i in 0..5 {
+        messages.push(message!(
+            remote_id: msg_id!(format!("normal_{i}")),
+            display_order: (50 + i),
+            time: (900 + i).into(),
+            snooze_time: 0.into()
+        ));
+    }
+
+    let mut data = hash_map! {
+        vec![SystemLabel::Inbox.remote_id().to_string()]: messages,
+    };
+    data.save_to_database(&mut tether).await;
+
+    let page_size = 5;
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, page_size)
+        .await
+        .unwrap();
+
+    // Load only the first page
+    let first_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(first_page.len(), 5);
+    assert!(test_scroller.has_more().await.unwrap());
+
+    // Insert a new message with time=15000 (highest) but snooze_time=0
+    let conversation = Conversation::find_by_remote_id(conv_id!(UNIQUE_CONV_ID).unwrap(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let address = Address::find_first("WHERE 1=1", params![], &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let new_message = message!(
+        remote_id: msg_id!("new_newest_message"),
+        local_conversation_id: conversation.local_id,
+        remote_conversation_id: conversation.remote_id,
+        local_address_id: address.id(),
+        remote_address_id: address.remote_id.unwrap(),
+        label_ids: vec![SystemLabel::Inbox.remote_id()],
+        display_order: 200,
+        time: 15000.into(),
+        snooze_time: 0.into()
+    );
+
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
+            save_single_message(&[label], &mut new_message.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_scroller.wait_for_update().await.unwrap().unwrap();
+
+    let new_msg_position = test_scroller
+        .items()
+        .iter()
+        .position(|m| m.remote_id == msg_id!("new_newest_message"))
+        .unwrap();
+
+    // With MAX(15000, 0) = 15000 > MAX(10000-10009, 1000-1009), it should be first
+    assert_eq!(new_msg_position, 0);
 }
