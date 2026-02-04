@@ -1,0 +1,9 @@
+---
+source: packages/search/src/index/text/inner/tests.rs
+expression: "index.get_token_ids_exact(&[\"token\".into()])"
+---
+{
+    TokenRef(
+        0,
+    ),
+}

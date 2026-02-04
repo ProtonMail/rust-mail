@@ -1,0 +1,90 @@
+---
+source: packages/search/src/entry/wasm.rs
+expression: "(id, attrs, a, b, sut)"
+---
+(
+    "x",
+    [
+        "a",
+        "b",
+    ],
+    [
+        EntryValue(
+            Some(
+                Integer(
+                    1,
+                ),
+            ),
+        ),
+        EntryValue(
+            Some(
+                Boolean(
+                    true,
+                ),
+            ),
+        ),
+    ],
+    [
+        EntryValue(
+            Some(
+                Tag(
+                    "tag",
+                ),
+            ),
+        ),
+        EntryValue(
+            Some(
+                Text(
+                    [
+                        (
+                            0,
+                            "hello",
+                        ),
+                        (
+                            6,
+                            "world",
+                        ),
+                    ],
+                ),
+            ),
+        ),
+    ],
+    Entry {
+        identifier: "x",
+        attributes: {
+            "a": [
+                Some(
+                    Integer(
+                        1,
+                    ),
+                ),
+                Some(
+                    Boolean(
+                        true,
+                    ),
+                ),
+            ],
+            "b": [
+                Some(
+                    Tag(
+                        "tag",
+                    ),
+                ),
+                Some(
+                    Text(
+                        [
+                            (
+                                0,
+                                "hello",
+                            ),
+                            (
+                                6,
+                                "world",
+                            ),
+                        ],
+                    ),
+                ),
+            ],
+        },
+    },
+)

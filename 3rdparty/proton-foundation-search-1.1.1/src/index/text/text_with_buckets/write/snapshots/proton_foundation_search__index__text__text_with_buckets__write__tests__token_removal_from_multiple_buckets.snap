@@ -1,0 +1,91 @@
+---
+source: packages/search/src/index/text/text_with_buckets/write/tests.rs
+expression: dump
+---
+576D43D2EE935A93911FA01A86A87275
+token occurrences bucket 1 - cached proton_foundation_search::index::text::text_with_buckets::tokens::Tokens
+[
+  -1,
+  0,
+  -2,
+  0,
+  -3,
+  0,
+  -4,
+  1,
+  0
+]
+613DEA3B99AD5974841096F341A09D5D
+token occurrences bucket 0 - cached proton_foundation_search::index::text::text_with_buckets::tokens::Tokens
+[
+  -1,
+  0,
+  -2,
+  0,
+  -3,
+  0,
+  -4,
+  0,
+  0
+]
+79D2FDDF4DC65C55AB4B812CEB1DF2A3
+text index - cached proton_foundation_search::index::text::text_with_buckets::content::Content
+{
+  "vocabulary": {
+    "next": 1,
+    "tokens": [
+      [
+        0,
+        "word"
+      ]
+    ],
+    "trigrams": [
+      [
+        [
+          "ord",
+          1
+        ],
+        [
+          0
+        ]
+      ],
+      [
+        [
+          "wor",
+          0
+        ],
+        [
+          0
+        ]
+      ]
+    ]
+  },
+  "occurrences": [
+    {
+      "entries": [
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "tokens": [
+        0
+      ],
+      "occurrences": "613DEA3B99AD5974841096F341A09D5D"
+    },
+    {
+      "entries": [
+        [
+          1,
+          0,
+          1
+        ]
+      ],
+      "tokens": [
+        0
+      ],
+      "occurrences": "576D43D2EE935A93911FA01A86A87275"
+    }
+  ]
+}

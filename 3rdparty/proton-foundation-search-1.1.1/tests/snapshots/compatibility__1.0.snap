@@ -1,0 +1,24 @@
+---
+source: packages/search/tests/compatibility.rs
+expression: results
+---
+privacy OR cool=* OR fool=*
+======================
+defender text:privacy, 
+nudge title:privacy, cool:true, fool:false, 
+proton text:privacy, fool:false, 
+
+cool=true OR fool=false
+======================
+nudge cool:true, fool:false, 
+proton fool:false, 
+
+drive int>=2 tag=*
+======================
+nudge title:drive, int:3, int:4, tag:gimme, 
+suite text:drive, int:2, tag:gimme, 
+
+tag=prime int=*
+======================
+defender tag:prime, int:1, 
+proton tag:prime, int:2, int:3,

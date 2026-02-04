@@ -1,0 +1,27 @@
+---
+source: packages/search/src/index/text/text_one_blob/inner/search/tests_fuzzy_large.rs
+assertion_line: 55
+expression: "trigrams.into_iter().take(20).collect::<Vec<_>>()"
+---
+[
+    "000",
+    "001",
+    "00t",
+    "01c",
+    "021",
+    "044",
+    "080",
+    "0th",
+    "100",
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107",
+    "108",
+    "109",
+    "110",
+    "111",
+]

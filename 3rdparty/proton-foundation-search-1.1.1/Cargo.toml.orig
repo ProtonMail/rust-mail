@@ -1,0 +1,87 @@
+[package]
+name = "proton-foundation-search"
+version = "1.1.1"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+license-file = "../../LICENSE"
+readme = "./README.md"
+repository.workspace = true
+keywords.workspace = true
+publish = true
+resolver = "2"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bench]]
+harness = false
+name = "insert"
+
+[[bench]]
+harness = false
+name = "search"
+
+[[bench]]
+harness = false
+name = "multi_token_query"
+
+[dependencies]
+ciborium = { version = "0.2" }
+console_error_panic_hook = { version = "0.1", optional = true }
+derive_more = { workspace = true, features = ["display", "from", "is_variant"] }
+distance = { version = "0.4.0" }
+facet = { workspace = true, optional = true }
+indexmap = { workspace = true, features = ["serde"] }
+itertools = { version = "0.14" }
+js-sys = { version = "0.3", optional = true }
+once_cell = { version = "1", default-features = false, features = ["alloc", "race"] }
+pest = { version = "2.7" }
+pest_derive = { version = "2.7" }
+serde = { version = "1", default-features = false, features = ["alloc", "rc"] }
+serde_json = { version = "1", features = ["alloc"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, optional = true }
+tracing-web = { version = "0.1", optional = true }
+unic-emoji = "0.9.0"
+uuid = { version = "1", default-features = false, features = ["js", "v4"] }
+# wasm
+wasm-bindgen = { version = "0.2", optional = true }
+
+[dev-dependencies]
+chrono = "*"
+insta = "*"
+# text
+maplit = { workspace = true }
+search-internal-helper.workspace = true
+test-log.workspace = true
+tracing-subscriber.workspace = true
+uuid = { version = "*", features = ["v5"] }
+
+[target.'cfg(not(target_family= "wasm"))'.dev-dependencies]
+criterion = { workspace = true }
+
+[target.'cfg(target_family= "wasm")'.dev-dependencies]
+wasm-bindgen-test = { version = "0.3" }
+
+[features]
+default = ["compile-time-tracing-filters", "facet", "wasm-bindgen"]
+bench-mode = []
+compile-time-tracing-filters = ["tracing/release_max_level_warn"]
+facet = ["dep:facet"]
+# feature flag for heavy end to end tests
+heavy-e2e = []
+# Makes blob IDs stable for tests
+test-stable-blob-id = ["uuid/v5"]
+wasm-bindgen = [
+  "dep:console_error_panic_hook",
+  "dep:js-sys",
+  "dep:tracing-subscriber",
+  "dep:tracing-web",
+  "dep:wasm-bindgen"
+]
+
+[lints.clippy]
+expect_used = "deny"
+unwrap_used = "deny"

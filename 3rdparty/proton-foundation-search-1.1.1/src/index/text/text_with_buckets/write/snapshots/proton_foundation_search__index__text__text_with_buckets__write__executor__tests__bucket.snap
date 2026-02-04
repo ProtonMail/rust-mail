@@ -1,0 +1,15 @@
+---
+source: packages/search/src/index/text/text_with_buckets/write/executor.rs
+expression: bucket
+---
+[
+  -1,
+  0,
+  -2,
+  0,
+  -3,
+  0,
+  -4,
+  1,
+  0
+]
