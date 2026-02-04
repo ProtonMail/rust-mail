@@ -1250,8 +1250,9 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
     let items = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(items.len(), 3);
 
-    // Verify ordering: same snooze_time, so should be ordered by context_time DESC (newest first)
-    // Expected order: conv_2 (context_time=700), conv_0 (context_time=500), conv_1 (context_time=300)
+    // Verify ordering: With MAX(snooze_time, context_time), all get MAX(1000, time) = 1000
+    // So tie-breaker is display_order DESC
+    // Expected order: conv_2 (display_order=30), conv_1 (display_order=20), conv_0 (display_order=10)
     // 1st
     assert_eq!(
         items[0].remote_id.as_ref().unwrap().to_string(),
@@ -1262,39 +1263,125 @@ async fn test_conversation_snooze_time_ordering_with_same_snooze_time_different_
     // 2nd
     assert_eq!(
         items[1].remote_id.as_ref().unwrap().to_string(),
-        "snooze_conv_0"
+        "snooze_conv_1"
     );
     assert_eq!(items[1].snooze_time.as_u64(), 1000);
-    assert_eq!(items[1].time.as_u64(), 500);
+    assert_eq!(items[1].time.as_u64(), 300);
     // 3rd
     assert_eq!(
         items[2].remote_id.as_ref().unwrap().to_string(),
-        "snooze_conv_1"
+        "snooze_conv_0"
     );
     assert_eq!(items[2].snooze_time.as_u64(), 1000);
-    assert_eq!(items[2].time.as_u64(), 300);
+    assert_eq!(items[2].time.as_u64(), 500);
 
     let mut last = conversation!(remote_id: Some("snooze_conv_3".into()),
         labels: vec![ConversationLabel {
             remote_label_id: Some(LabelId::inbox()),
-            context_snooze_time: 1000.into(),
-            context_time: 200.into(),
+            context_snooze_time: 500.into(),
+            context_time: 1500.into(),
             ..ConversationLabel::test_default()
         }],
-        display_order: 30
+        display_order: 5
     );
     tether.tx(async |tx| last.save(tx).await).await.unwrap();
-    let next_items = test_scroller.fetch_more_and_wait().await.unwrap();
 
-    // Should get snooze_conv_3 (context_time=200) which is the only conversation
-    // with the same snooze_time but older context_time than the cursor
-    assert_eq!(next_items.len(), 1);
+    test_scroller.wait_for_update().await.unwrap().unwrap();
+
+    // snooze_conv_3 should appear first: MAX(500, 1500) = 1500 > 1000
+    let items = test_scroller.items();
+    assert_eq!(items.len(), 4);
     assert_eq!(
-        next_items[0].remote_id.as_ref().unwrap().to_string(),
+        items[0].remote_id.as_ref().unwrap().to_string(),
         "snooze_conv_3"
     );
-    assert_eq!(next_items[0].snooze_time.as_u64(), 1000);
-    assert_eq!(next_items[0].time.as_u64(), 200);
+    assert_eq!(items[0].snooze_time.as_u64(), 500);
+    assert_eq!(items[0].time.as_u64(), 1500);
+}
+
+#[tokio::test]
+async fn test_conversation_snooze_time_pagination_fix_works() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection().await.unwrap();
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+
+    let mut conversations = vec![];
+
+    // Create 10 snoozed conversations
+    for i in 0..10 {
+        conversations.push(conversation!(
+            remote_id: Some(format!("snoozed_{i}").into()),
+            display_order: (100 + i),
+            labels: vec![ConversationLabel {
+                remote_label_id: Some(LabelId::inbox()),
+                context_time: (1000 + i).into(),
+                context_snooze_time: (10000 + i).into(),
+                ..ConversationLabel::test_default()
+            }]
+        ));
+    }
+
+    // Create 5 non-snoozed conversations
+    for i in 0..5 {
+        conversations.push(conversation!(
+            remote_id: Some(format!("normal_{i}").into()),
+            display_order: (50 + i),
+            labels: vec![ConversationLabel {
+                remote_label_id: Some(LabelId::inbox()),
+                context_time: (900 + i).into(),
+                context_snooze_time: 0.into(),
+                ..ConversationLabel::test_default()
+            }]
+        ));
+    }
+
+    let mut data = hash_map! {
+        vec![LabelId::inbox().to_string()]: conversations,
+    };
+    data.save_to_database(&mut tether).await;
+
+    let page_size = 5;
+    let mut test_scroller = TestScroller::conversations(&user_ctx, local_label_id, page_size)
+        .await
+        .unwrap();
+
+    // Load only the first page
+    let first_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(first_page.len(), 5);
+    assert!(test_scroller.has_more().await.unwrap());
+
+    // Insert a new conversation with context_time=15000 (highest) but context_snooze_time=0
+    let mut new_conversation = conversation!(
+        remote_id: Some("new_newest_conversation".into()),
+        display_order: 200,
+        labels: vec![ConversationLabel {
+            remote_label_id: Some(LabelId::inbox()),
+            context_time: 15000.into(),
+            context_snooze_time: 0.into(),
+            ..ConversationLabel::test_default()
+        }]
+    );
+
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
+            save_single_conversation(&[label], &mut new_conversation, bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    test_scroller.wait_for_update().await.unwrap().unwrap();
+
+    let new_conv_position = test_scroller
+        .items()
+        .iter()
+        .position(|c| c.remote_id == conv_id!("new_newest_conversation"))
+        .unwrap();
+
+    // With MAX(15000, 0) = 15000 > MAX(10000-10009, 1000-1009), it should be first
+    assert_eq!(new_conv_position, 0);
 }
 
 #[tokio::test]

@@ -136,13 +136,7 @@ impl MessageScrollData {
     pub fn context_time(&self, order_field: ScrollOrderField) -> UnixTimestamp {
         match order_field {
             ScrollOrderField::Time => self.message_time,
-            ScrollOrderField::SnoozeTime => {
-                if self.snooze_time.as_u64() > 0 {
-                    self.snooze_time
-                } else {
-                    self.message_time
-                }
-            }
+            ScrollOrderField::SnoozeTime => self.snooze_time.max(self.message_time),
         }
     }
 }
@@ -209,37 +203,29 @@ impl ScrollData for MessageScrollData {
             ('<', "<=", "ASC")
         };
 
-        let time_column = match order_field {
-            ScrollOrderField::Time => "messages.time".to_string(),
-            ScrollOrderField::SnoozeTime => formatdoc!(
-                "CASE WHEN messages.snooze_time > 0
-                    THEN messages.snooze_time
-                    ELSE messages.time END"
-            ),
+        // Calculate the effective cursor time based on order_field
+        // For SnoozeTime ordering, we use the maximum of snooze_time and time
+        let cursor_effective_time = match order_field {
+            ScrollOrderField::Time => time,
+            ScrollOrderField::SnoozeTime => snooze_time.max(time),
         };
 
-        let cursor_constraint = match order_field {
-            ScrollOrderField::Time => formatdoc!(
-                "(
-                {time_column} {time_op} {time}
-                OR
-                ({time_column} = {time} AND messages.display_order {fallback_order_op} ?2)
-                )"
-            ),
-            ScrollOrderField::SnoozeTime => formatdoc!(
-                "(
-                {time_column} {time_op} {snooze_time}
-                OR
-                ({time_column} = {snooze_time}
-                    AND messages.time {time_op} {time}
-                )
-                OR
-                ({time_column} = {snooze_time}
-                    AND messages.time = {time}
-                    AND messages.display_order {fallback_order_op} ?2)
-                )"
-            ),
+        let time_column = match order_field {
+            ScrollOrderField::Time => "messages.time".to_string(),
+            ScrollOrderField::SnoozeTime => {
+                // Use MAX to always pick the highest value (for DESC) or lowest (for ASC)
+                // This ensures consistent ordering regardless of whether snooze_time is 0
+                "MAX(messages.snooze_time, messages.time)".to_string()
+            }
         };
+
+        let cursor_constraint = formatdoc!(
+            "(
+                {time_column} {time_op} {cursor_effective_time}
+                OR
+                ({time_column} = {cursor_effective_time} AND messages.display_order {fallback_order_op} ?2)
+            )"
+       );
 
         let mut query = formatdoc!(
             "
@@ -267,21 +253,12 @@ impl ScrollData for MessageScrollData {
             }
         }
 
-        let order_by = match order_field {
-            ScrollOrderField::Time => format!(
-                " ORDER BY
-                {time_column} {sort_op},
-                messages.display_order {sort_op}
-            "
-            ),
-            ScrollOrderField::SnoozeTime => format!(
-                " ORDER BY
-                {time_column} {sort_op},
-                messages.time {sort_op},
-                messages.display_order {sort_op}
-            "
-            ),
-        };
+        let order_by = format!(
+            " ORDER BY
+            {time_column} {sort_op},
+            messages.display_order {sort_op}
+        "
+        );
 
         query += &order_by;
 
@@ -417,13 +394,7 @@ impl ConversationScrollData {
     pub fn context_time(&self, order_field: ScrollOrderField) -> UnixTimestamp {
         match order_field {
             ScrollOrderField::Time => self.conversation_time,
-            ScrollOrderField::SnoozeTime => {
-                if self.snooze_time.as_u64() > 0 {
-                    self.snooze_time
-                } else {
-                    self.conversation_time
-                }
-            }
+            ScrollOrderField::SnoozeTime => self.snooze_time.max(self.conversation_time),
         }
     }
 }
@@ -487,39 +458,26 @@ impl ScrollData for ConversationScrollData {
             ('<', "<=", "ASC")
         };
 
+        let cursor_effective_time = match order_field {
+            ScrollOrderField::Time => time,
+            ScrollOrderField::SnoozeTime => snooze_time.max(time),
+        };
+
         let time_column = match order_field {
             ScrollOrderField::Time => "conversation_labels.context_time".to_string(),
             ScrollOrderField::SnoozeTime => {
-                formatdoc!(
-                    "CASE WHEN conversation_labels.context_snooze_time > 0
-                        THEN conversation_labels.context_snooze_time
-                        ELSE conversation_labels.context_time END"
-                )
+                "MAX(conversation_labels.context_snooze_time, conversation_labels.context_time)"
+                    .to_string()
             }
         };
 
-        let cursor_constraint = match order_field {
-            ScrollOrderField::Time => format!(
-                "(
-                {time_column} {time_op} {time}
+        let cursor_constraint = format!(
+           "(
+                {time_column} {time_op} {cursor_effective_time}
                 OR
-                ({time_column} = {time} AND conversations.display_order {fallback_order_op} ?2)
-                )"
-            ),
-            ScrollOrderField::SnoozeTime => formatdoc!(
-                "(
-                {time_column} {time_op} {snooze_time}
-                OR
-                ({time_column} = {snooze_time}
-                    AND conversation_labels.context_time {time_op} {time}
-                )
-                OR
-                ({time_column} = {snooze_time}
-                    AND conversation_labels.context_time = {time}
-                    AND conversations.display_order {fallback_order_op} ?2)
-                )"
-            ),
-        };
+                ({time_column} = {cursor_effective_time} AND conversations.display_order {fallback_order_op} ?2)
+            )"
+        );
 
         let mut query = formatdoc!(
             "
@@ -549,21 +507,12 @@ impl ScrollData for ConversationScrollData {
             }
         }
 
-        let order_by = match order_field {
-            ScrollOrderField::Time => format!(
-                " ORDER BY
-                {time_column} {sort_op},
-                conversations.display_order {sort_op}
-            "
-            ),
-            ScrollOrderField::SnoozeTime => format!(
-                " ORDER BY
-                {time_column} {sort_op},
-                conversation_labels.context_time {sort_op},
-                conversations.display_order {sort_op}
-            "
-            ),
-        };
+        let order_by = format!(
+            " ORDER BY
+            {time_column} {sort_op},
+            conversations.display_order {sort_op}
+        "
+        );
         query += &order_by;
 
         if let Some(limit) = limit {
