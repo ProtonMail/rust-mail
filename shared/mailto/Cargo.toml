@@ -9,6 +9,8 @@ license.workspace = true
 percent-encoding = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+email_address = { workspace = true }
+
 
 [dev-dependencies]
 test-case = { workspace = true }
