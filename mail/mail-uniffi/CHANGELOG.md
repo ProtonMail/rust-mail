@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.25] - 2026-02-06
+
+### Fixes
+
+- [ET-5841] Do not display inline attachments on the message view
+- [ET-5823] Support for `;` delimiters, Display Name & multiple recepients in (B)CC
+- [ET-5610] Do not delete attachments after conversation id swap
+
+
 ## [mail-uniffi-v0.161.24] - 2026-02-04
 
 ### Fixes
