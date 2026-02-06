@@ -8,4 +8,5 @@ ignore = [
 "RUSTSEC-2026-0002", # unsound (W)
 "RUSTSEC-2025-0134", # unmaintained (W)
 "RUSTSEC-2026-0007", # integer overflow (E)
+"RUSTSEC-2026-0009", # `time` vuln - DOS with Stack overflow => upgrade to at least 0.3.47
 ]
