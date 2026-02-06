@@ -269,6 +269,17 @@ mod tests {
         },
     };
 
+    const TEST_MIXED_CASE2: TestCase = TestCase {
+        given: "Mailto:hello@proton.com",
+        expected: || Mailto {
+            to: vec!["hello@proton.com".into()],
+            cc: vec![],
+            bcc: vec![],
+            subject: None,
+            body: None,
+        },
+    };
+
     #[allow(clippy::needless_pass_by_value)]
     #[test_case(TEST_TO)]
     #[test_case(TEST_TO_ENCODED)]
@@ -286,6 +297,7 @@ mod tests {
     #[test_case(TEST_SUBJECT_AND_BODY)]
     #[test_case(TEST_EVERYTHING)]
     #[test_case(TEST_MIXED_CASE)]
+    #[test_case(TEST_MIXED_CASE2)]
     fn from_str(case: TestCase) {
         let actual = Mailto::from_str(case.given).unwrap();
 
