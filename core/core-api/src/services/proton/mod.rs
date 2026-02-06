@@ -74,6 +74,7 @@ mod core;
 mod data;
 mod layers;
 mod macros;
+mod measurements;
 mod payments;
 mod store;
 
