@@ -1,4 +1,4 @@
-use email_address::EmailAddress;
+use email_address::{EmailAddress, Options};
 use std::str::FromStr;
 use thiserror::Error;
 use url::{ParseError, Url};
@@ -13,6 +13,17 @@ pub struct Mailto {
     pub body: Option<String>,
 }
 
+fn parse_email_address(email: &str) -> Result<EmailAddress, email_address::Error> {
+    EmailAddress::parse_with_options(
+        email,
+        Options::default()
+            .without_domain_literal()
+            .with_display_text()
+            .with_long_local_parts()
+            .with_required_tld(),
+    )
+}
+
 fn parse_emails(input: &str) -> Vec<String> {
     input
         .split([',', ';'])
@@ -24,7 +35,7 @@ fn parse_emails(input: &str) -> Vec<String> {
                 Err(_) => email.to_string(),
             };
 
-            let Ok(email) = EmailAddress::from_str(&email) else {
+            let Ok(email) = parse_email_address(&email) else {
                 return email;
             };
             email.email()
