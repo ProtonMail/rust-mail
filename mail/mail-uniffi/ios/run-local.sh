@@ -14,7 +14,7 @@ xcrun xcodebuild \
         -project "$IOS_REPO_ROOT/ProtonMail.xcodeproj" \
         -configuration Debug \
         -destination "$DESTINATION" \
-        -sdk iphonesimulator18.4 \
+        -sdk iphonesimulator26.2 \
         -derivedDataPath "./target/ios-build" \
         -resolvePackageDependencies
 
@@ -24,7 +24,7 @@ xcrun xcodebuild \
         -project "$IOS_REPO_ROOT/ProtonMail.xcodeproj" \
         -configuration Debug \
         -destination "$DESTINATION" \
-        -sdk iphonesimulator18.4 \
+        -sdk iphonesimulator26.2 \
         -derivedDataPath "./target/ios-build" \
         REMOVE_STATIC_EXECUTABLES_FROM_EMBEDDED_BUNDLES=NO \
         build
@@ -38,4 +38,3 @@ xcrun simctl boot "$DEVICE_ID" || true
 # Install and launch the app
 xcrun simctl install "$DEVICE_ID" "$APP_PATH"
 xcrun simctl launch "$DEVICE_ID" "$BUNDLE_ID"
-
