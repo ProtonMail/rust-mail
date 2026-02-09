@@ -485,24 +485,24 @@ impl RollbackHandler for LabelRollbackHandler {
         let tether = tx_runner.tether();
         for item in items.iter_mut() {
             // Only check parent dependency if it's not already in the rollback set
-            if let Some(parent_id) = &item.parent_id {
-                if !rollback_label_ids.contains(parent_id) {
-                    dependency_fetcher.check_label(item, tether).await?;
-                }
+            if let Some(parent_id) = &item.parent_id
+                && !rollback_label_ids.contains(parent_id)
+            {
+                dependency_fetcher.check_label(item, tether).await?;
             }
         }
 
         let unresolved_label_ids = dependency_fetcher.fetch_and_store(api, tx_runner).await?;
 
         for item in items.iter_mut() {
-            if let Some(parent_id) = &item.parent_id {
-                if unresolved_label_ids.contains(parent_id) {
-                    warn!(
-                        "Removing unresolved parent reference {} from label {}",
-                        parent_id, item.id
-                    );
-                    item.parent_id = None;
-                }
+            if let Some(parent_id) = &item.parent_id
+                && unresolved_label_ids.contains(parent_id)
+            {
+                warn!(
+                    "Removing unresolved parent reference {} from label {}",
+                    parent_id, item.id
+                );
+                item.parent_id = None;
             }
         }
 
