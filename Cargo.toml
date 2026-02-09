@@ -360,8 +360,9 @@ path = "shared/observability"
 path = "shared/mailto"
 
 [workspace.dependencies.proton-foundation-search]
-version = "0.5.1-preview"
+version = "1.1.1"
 registry = "proton"
+default-features = false
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

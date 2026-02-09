@@ -9,4 +9,10 @@ ignore = [
 "RUSTSEC-2025-0134", # unmaintained (W)
 "RUSTSEC-2026-0007", # integer overflow (E)
 "RUSTSEC-2026-0009", # `time` vuln - DOS with Stack overflow => upgrade to at least 0.3.47
+"RUSTSEC-2025-0084", # unic-emoji unmaintained (via proton-foundation-search)
+"RUSTSEC-2025-0090", # unic-emoji-char unmaintained (via proton-foundation-search)
+"RUSTSEC-2025-0098", # unic-ucd-version unmaintained (via proton-foundation-search)
+"RUSTSEC-2025-0081", # unic-char-property unmaintained (via proton-foundation-search)
+"RUSTSEC-2025-0075", # unic-char-range unmaintained (via proton-foundation-search)
+"RUSTSEC-2025-0080", # unic-common unmaintained (via proton-foundation-search)
 ]
