@@ -39,13 +39,12 @@
 
 use proton_foundation_search::document::{Document, Value};
 use proton_foundation_search::engine::{CleanupEvent, Engine, QueryEvent, WriteEvent};
-use proton_foundation_search::index::text::TextIndexSansIo;
+use proton_foundation_search::index::text::TextIndex;
 use proton_foundation_search::processor::ProcessorConfig;
 use proton_foundation_search::query::option::QueryOptions;
 use proton_foundation_search::query::results::FoundEntry;
 use proton_foundation_search::query::stats::CollectionStats;
 use proton_foundation_search::serialization::SerDes;
-use proton_foundation_search::transaction::{LoadEvent, SaveEvent};
 use tracing::{debug, error, info, warn};
 
 use crate::engine::{CleanupResult, IndexResult, SearchStats};
@@ -178,8 +177,8 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         info!("Initializing Foundation Search engine");
 
         let engine = Engine::builder()
-            .with_builtin_processor(ProcessorConfig::default())
-            .with_index(TextIndexSansIo::default())
+            .with_builtin_processor(&ProcessorConfig::default())
+            .with_index(TextIndex::default())
             .build();
 
         Self {
@@ -236,7 +235,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         let (load_tx, mut load_rx) = tokio::sync::mpsc::unbounded_channel::<(
             String,
-            oneshot::Sender<Result<Vec<u8>, SearchError>>,
+            oneshot::Sender<Result<Option<Vec<u8>>, SearchError>>,
         )>();
         let storage_clone = storage.clone();
 
@@ -248,13 +247,9 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         let load_handle = task_service.spawn(
             async move {
                 while let Some((name, response_tx)) = load_rx.recv().await {
-                    let blob_result = storage_clone
-                        .load(&name)
-                        .await
-                        .map_err(|e| {
-                            SearchError::BlobStorage(format!("Failed to load '{name}': {e}"))
-                        })
-                        .map(Option::unwrap_or_default);
+                    let blob_result = storage_clone.load(&name).await.map_err(|e| {
+                        SearchError::BlobStorage(format!("Failed to load '{name}': {e}"))
+                    });
                     let _ = response_tx.send(blob_result);
                 }
             }
@@ -271,15 +266,19 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
             for event in commit_iter {
                 match event {
-                    WriteEvent::Load(LoadEvent { name, send }) => {
+                    WriteEvent::Load(load_event) => {
+                        let blob_id = load_event.id();
                         // Send load request to async task via channel
                         let (tx, rx) = oneshot::channel();
-                        if load_tx_for_blocking.send((name.to_string(), tx)).is_err() {
+                        if load_tx_for_blocking
+                            .send((blob_id.to_string(), tx))
+                            .is_err()
+                        {
                             return Err(SearchError::Internal("Load channel closed".to_string()));
                         }
 
                         // Wait for async load to complete (blocking call, but I/O is async)
-                        let blob = match rx.blocking_recv() {
+                        let blob_option = match rx.blocking_recv() {
                             Ok(Ok(blob)) => blob,
                             Ok(Err(e)) => return Err(e),
                             Err(_) => {
@@ -289,18 +288,36 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                             }
                         };
 
-                        send(&serdes, blob).map_err(|e| {
-                            SearchError::Serialization(format!("Failed to send '{name}': {e:?}"))
-                        })?;
+                        // Use send_empty() when blob doesn't exist, send() when it does
+                        match blob_option {
+                            Some(blob) => {
+                                load_event.send(&serdes, &blob).map_err(|e| {
+                                    SearchError::Serialization(format!(
+                                        "Failed to send blob '{blob_id}': {e:?}"
+                                    ))
+                                })?;
+                            }
+                            None => {
+                                load_event.send_empty().map_err(|e| {
+                                    SearchError::Serialization(format!(
+                                        "Failed to send empty blob '{blob_id}': {e:?}"
+                                    ))
+                                })?;
+                            }
+                        }
                     }
-                    WriteEvent::Save(SaveEvent { name, recv }) => {
-                        let blob = recv(&serdes).map_err(|e| {
-                            SearchError::Serialization(format!("Failed to recv '{name}': {e:?}"))
+                    WriteEvent::Save(save_event) => {
+                        let blob_id = save_event.id();
+                        let cached = save_event.recv();
+                        let blob = cached.serialize(&serdes).map_err(|e| {
+                            SearchError::Serialization(format!(
+                                "Failed to serialize blob '{blob_id}': {e:?}"
+                            ))
                         })?;
-                        save_ops.push((name.to_string(), blob));
+                        save_ops.push((blob_id.to_string(), blob));
                     }
-                    WriteEvent::Modified(_id) => {
-                        // Document operation completed successfully
+                    WriteEvent::Stats(_stats) => {
+                        // Informational stats during write - ignored
                     }
                 }
             }
@@ -363,9 +380,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
                     // If it does, it indicates a bug in our serialization logic.
                     let mut writer = engine.write().expect("Engine write lock should always succeed - writes are serialized by service-level RwLock");
 
-                    writer.insert(doc).map_err(|e| {
-                        SearchError::Internal(format!("Failed to insert document: {e:?}"))
-                    })?;
+                    writer.insert(doc);
 
                     Ok(writer.commit())
                 },
@@ -418,9 +433,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
                     // Insert all documents before committing
                     for doc in docs {
-                        writer.insert(doc).map_err(|e| {
-                            SearchError::Internal(format!("Failed to insert document: {e:?}"))
-                        })?;
+                        writer.insert(doc);
                     }
 
                     Ok(writer.commit())
@@ -601,37 +614,51 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
             for event in cleanup {
                 match event {
-                    CleanupEvent::Load(LoadEvent { name, send }) => {
+                    CleanupEvent::Load(load_event) => {
+                        let blob_id = load_event.id();
+                        let name = blob_id.to_string();
                         debug!("Cleanup: loading blob '{}'", name);
-                        let blob = handle
+                        let blob_option = handle
                             .block_on(storage.load(&name))
                             .map_err(|e| {
                                 SearchError::BlobStorage(format!(
                                     "Failed to load '{name}': {e}"
                                 ))
-                            })?
-                            .unwrap_or_default();
-                        send(&serdes, blob).map_err(|e| {
-                            SearchError::Serialization(format!(
-                                "Failed to send '{name}': {e:?}"
-                            ))
-                        })?;
+                            })?;
+                        // Use send_empty() when blob doesn't exist, send() when it does
+                        match blob_option {
+                            Some(blob) => {
+                                load_event.send(&serdes, &blob).map_err(|e| {
+                                    SearchError::Serialization(format!(
+                                        "Failed to send '{name}': {e:?}"
+                                    ))
+                                })?;
+                            }
+                            None => {
+                                load_event.send_empty().map_err(|e| {
+                                    SearchError::Serialization(format!(
+                                        "Failed to send empty '{name}': {e:?}"
+                                    ))
+                                })?;
+                            }
+                        }
                     }
-                    CleanupEvent::Save(SaveEvent { name, recv }) => {
+                    CleanupEvent::Save(save_event) => {
+                        let blob_id = save_event.id();
+                        let name = blob_id.to_string();
                         debug!("Cleanup: saving blob '{}'", name);
-                        let blob = recv(&serdes).map_err(|e| {
-                            SearchError::Serialization(format!(
-                                "Failed to recv '{name}': {e:?}"
-                            ))
+                        let cached = save_event.recv();
+                        let blob = cached.serialize(&serdes).map_err(|e| {
+                            SearchError::Serialization(format!("Failed to serialize '{name}': {e:?}"))
                         })?;
                         handle.block_on(storage.save(&name, &blob)).map_err(|e| {
                             SearchError::BlobStorage(format!("Failed to save '{name}': {e}"))
                         })?;
                     }
-                    CleanupEvent::Release(blob_name) => {
-                        let name = blob_name.as_ref();
+                    CleanupEvent::Release(release_event) => {
+                        let name = release_event.id().to_string();
                         debug!("Cleanup: releasing blob '{}'", name);
-                        match handle.block_on(storage.delete(name)) {
+                        match handle.block_on(storage.delete(&name)) {
                             Ok(true) => {
                                 deleted_count += 1;
                                 debug!("Cleanup: deleted blob '{}'", name);
@@ -678,17 +705,26 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
     }
 
     /// Get index statistics
+    ///
+    /// Note: The 1.1.0 API no longer exposes stats directly.
+    /// This returns default values for now.
     pub fn stats(&self) -> SearchStats {
-        let stats = self.engine.stats();
+        // TODO: Foundation Search 1.1.0 removed the stats() method
+        // Need to find alternative way to get document count if needed
         SearchStats {
-            documents_total: stats.documents_total.unwrap_or(0),
-            is_writing: stats.writing,
+            documents_total: 0,
+            is_writing: false,
         }
     }
 
     /// Check if index has any documents
+    ///
+    /// Note: With Foundation Search 1.1.0, we can't easily check document count.
+    /// This always returns true to ensure search is attempted.
     pub fn has_documents(&self) -> bool {
-        self.stats().documents_total > 0
+        // TODO: Foundation Search 1.1.0 removed stats access
+        // Always return true to ensure search is attempted
+        true
     }
 
     /// Clear all index data
@@ -735,11 +771,26 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
 
         for event in search_query {
             match event {
-                QueryEvent::Load(LoadEvent { name, send }) => {
-                    let blob = self.storage.load(&name).await?.unwrap_or_default();
-                    send(&self.serdes, blob).map_err(|e| {
-                        SearchError::Serialization(format!("Failed to send blob '{name}': {e:?}"))
-                    })?;
+                QueryEvent::Load(load_event) => {
+                    let name = load_event.id().to_string();
+                    let blob_option = self.storage.load(&name).await?;
+                    // Use send_empty() when blob doesn't exist, send() when it does
+                    match blob_option {
+                        Some(blob) => {
+                            load_event.send(&self.serdes, &blob).map_err(|e| {
+                                SearchError::Serialization(format!(
+                                    "Failed to send blob '{name}': {e:?}"
+                                ))
+                            })?;
+                        }
+                        None => {
+                            load_event.send_empty().map_err(|e| {
+                                SearchError::Serialization(format!(
+                                    "Failed to send empty blob '{name}': {e:?}"
+                                ))
+                            })?;
+                        }
+                    }
                 }
                 QueryEvent::Found(found) => {
                     results.push(found);
