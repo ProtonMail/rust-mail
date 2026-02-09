@@ -886,6 +886,23 @@ impl Attachment {
     ) -> Result<Option<Attachment>, MailContextError> {
         Ok(Self::find_first("WHERE content_id=?", params![content_id.clone()], tether).await?)
     }
+
+    pub async fn update_conversation_id_for_attachments_with_message_id(
+        msg_id: LocalMessageId,
+        conversation_id: LocalConversationId,
+        remote_conversation_id: ConversationId,
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        tx.execute(
+            format!(
+                "UPDATE {} SET local_conversation_id = ?, remote_conversation_id = ? WHERE local_message_id = ?",
+                Self::table_name()
+            ),
+            params![conversation_id, remote_conversation_id, msg_id],
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 impl ModelHooks for Attachment {

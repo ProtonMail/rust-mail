@@ -710,16 +710,22 @@ impl Save {
                 // Do not override all the data as it may override local data that we modified
                 // but is out of date when we are making this request. The only value we should
                 // care about is the display order. Everything else we control.
+                let new_remote_conv_id = new_local_message.remote_conversation_id.expect("Should be set after api fetch");
                 Message::update_ids_and_display_order(
                     local_message_id,
                     local_conversation_id,
                     new_local_message.display_order,
                     new_local_message.remote_id.expect("Should be set after api fetch"),
-                    new_local_message.remote_conversation_id.expect("Should be set after api fetch"),
+                    new_remote_conv_id.clone(),
                     bond,
                 )
                     .await
                     .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
+
+                // Update attachment metadata as well to make sure conversation is also swapped.
+                Attachment::update_conversation_id_for_attachments_with_message_id(local_message_id, local_conversation_id, new_remote_conv_id, bond).await.inspect_err(|e| {
+                    tracing::error!("Failed to update draft attachment conversation ids: {e:?}")
+                })?;
 
                 if remote_message_id.is_none() {
                     // When we create a draft on the server, all inherited attachments get a new remote

@@ -370,6 +370,11 @@ impl Draft {
                                 error!("Failed to create public key attachment: {e:?}")
                             })?;
 
+                    tracing::debug!(
+                        "Attaching public key is enabled (name = {})",
+                        public_key_attachment.filename
+                    );
+
                     DraftAttachmentMetadata::pending(
                         metadata.id.unwrap(),
                         public_key_attachment.local_id.unwrap(),
@@ -548,6 +553,10 @@ impl Draft {
                 if mail_settings.attach_public_key {
                     let public_key_attachment =
                         Attachment::gen_public_key(context, &address, tx).await?;
+                    tracing::debug!(
+                        "Attaching public key is enabled (name = {})",
+                        public_key_attachment.attachment.filename
+                    );
 
                     // If we already have the public key, we should just skip adding the attachment.
                     if !attachments.iter().any(|attachment| {
@@ -555,6 +564,7 @@ impl Draft {
                     }) {
                         let attachment = public_key_attachment.store(context, tx).await?;
 
+                        tracing::info!("Attaching new public key");
                         DraftAttachmentMetadata::pending(
                             metadata.id.unwrap(),
                             attachment.local_id.unwrap(),
@@ -563,6 +573,8 @@ impl Draft {
                         )
                         .save(tx)
                         .await?;
+                    } else {
+                        tracing::info!("Public key already attached");
                     }
                 }
 

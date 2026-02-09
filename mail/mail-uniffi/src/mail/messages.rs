@@ -29,7 +29,7 @@ use proton_mail_common::Unexpected;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::datatypes::{
-    AttachmentMetadata as RealAttachmentMetadata, MobileAction as RealMobileAction,
+    AttachmentMetadata as RealAttachmentMetadata, Disposition, MobileAction as RealMobileAction,
     ParsedHeaderValue,
 };
 use proton_mail_common::decrypted_message::{
@@ -81,14 +81,30 @@ impl DecryptedMessage {
         .into()
     }
 
-    /// The full attachment list contained inside the message body.
+    /// The attachment list contained inside the message body.
     ///
     /// Message/Conversation attachments are limited to only 10.
+    /// Only attachments with `Disposition::Attachment` are returned.
     pub fn attachments(&self) -> Vec<AttachmentMetadata> {
         self.body
             .metadata
             .attachments
             .iter()
+            .filter(|a| matches!(a.disposition, Disposition::Attachment))
+            .cloned()
+            .map(|a| RealAttachmentMetadata::from(a).into())
+            .collect()
+    }
+
+    /// The inline attachment list contained inside the message body.
+    ///
+    /// Only attachments with `Disposition::Inline` are returned.
+    pub fn inline(&self) -> Vec<AttachmentMetadata> {
+        self.body
+            .metadata
+            .attachments
+            .iter()
+            .filter(|a| matches!(a.disposition, Disposition::Inline))
             .cloned()
             .map(|a| RealAttachmentMetadata::from(a).into())
             .collect()

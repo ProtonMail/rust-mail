@@ -9,7 +9,8 @@ use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::prelude::{
-    AttachmentId, ContentDisposition, MessageAttachmentHeaders,
+    AttachmentId, ContentDisposition, MessageAttachmentHeaders, NewAttachmentDisposition,
+    NewAttachmentParams, NewAttachmentResponse, PostAttachmentResponse,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
@@ -17,9 +18,9 @@ use proton_mail_api::services::proton::request_data::{
 use proton_mail_api::services::proton::response_data::MessageFlags;
 use proton_mail_api::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_mail_common::MailContextError;
-use proton_mail_common::datatypes::attachment::ContentId;
+use proton_mail_common::datatypes::attachment::{ContentId, MimeType as AttachmentMimeType};
 use proton_mail_common::datatypes::{
-    MessageSender, MimeType, ParsedHeaders, RollbackItemType, SystemLabelId,
+    AttachmentMetadata, MessageSender, MimeType, ParsedHeaders, RollbackItemType, SystemLabelId,
 };
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::DraftAddressValidationError;
@@ -28,9 +29,9 @@ use proton_mail_common::draft::{
     SaveError,
 };
 use proton_mail_common::models::{
-    Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
-    DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata, RawMessageBody,
-    RollbackItem,
+    Attachment, AttachmentType, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState,
+    DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
+    RawMessageBody, RollbackItem,
 };
 use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
@@ -38,6 +39,7 @@ use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -2183,6 +2185,8 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
     // a new conversation id that is not known yet. It's also possible for to enter
     // a case where the converastion is swapped to a conversation we already have and
     // backend then deletes the placeholder, resulting in loss of the drat metadata.
+
+    // We also need to make sure that attachments are preserved.
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
@@ -2191,7 +2195,6 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
 
     let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
     params.addresses[0].status = AddressStatus::Disabled;
-
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
 
@@ -2210,7 +2213,13 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
         .clear();
     remote_existing_message.body.attachments.clear();
 
-    let params = draft_test_params();
+    let pub_key_attachment_id = AttachmentId::from("PUB_KEY");
+    let pub_key_filename = "publickey - rust_test@proton.ch - 0x11B13868.asc";
+
+    let mut params = draft_test_params();
+    let mut mail_settings = params.mail_settings.unwrap_or_default();
+    mail_settings.attach_public_key = true;
+    params.mail_settings = Some(mail_settings);
     let message = draft_message();
 
     let changed_conversation_id = ConversationId::new("surprise!".into());
@@ -2258,12 +2267,58 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
         m
     };
 
+    let attachment_key_packets = {
+        let mut packets = DraftAttachmentKeyPackets::new();
+        packets.insert(pub_key_attachment_id.clone(), KeyPackets::from_vec(vec![]));
+        packets
+    };
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
-        message_with_new_conv_id,
+        message_with_new_conv_id.clone(),
         Some(remote_existing_message.metadata.id.clone()),
         Some(DraftAttachmentKeyPackets::new()),
+    )
+    .await;
+
+    ctx.mock_create_attachment(
+        NewAttachmentParams {
+            filename: pub_key_filename.into(),
+            message_id: message.metadata.id.clone(),
+            mime_type: "application/pgp-keys".into(),
+            disposition: NewAttachmentDisposition::Attachment,
+            key_packets: vec![],
+            signature: None,
+            enc_signature: None,
+            data_packet: vec![],
+        },
+        Ok(PostAttachmentResponse {
+            attachment: NewAttachmentResponse {
+                id: pub_key_attachment_id.clone(),
+                disposition: Disposition::Attachment,
+                enc_signature: None,
+                key_packets: KeyPackets::from_vec(vec![]),
+                signature: None,
+                file_name: pub_key_filename.into(),
+                file_size: 1024,
+                headers: MessageAttachmentHeaders {
+                    content_disposition: ContentDisposition::One("attachment".into()),
+                    content_id: None,
+                    content_transfer_encoding: None,
+                    image_height: None,
+                    image_width: None,
+                },
+            },
+        }),
+    )
+    .await;
+
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params.clone(),
+        message_with_new_conv_id.clone(),
+        attachment_key_packets.clone(),
     )
     .await;
 
@@ -2279,7 +2334,7 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
             message.metadata.conversation_id = existing_converation_remote_id.clone();
             message
         },
-        DraftAttachmentKeyPackets::new(),
+        attachment_key_packets,
     )
     .await;
 
@@ -2302,6 +2357,12 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
     .await
     .unwrap();
 
+    assert!(
+        Conversation::find_by_remote_id(changed_conversation_id.clone(), &tether)
+            .await
+            .unwrap()
+            .is_none()
+    );
     draft.save().await.unwrap();
 
     let first_conversation_id = draft.conversation_id().await.unwrap().unwrap();
@@ -2315,6 +2376,31 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
     assert_ne!(first_conversation_id, second_conversation_id);
     assert_eq!(local_changed_conversation_id, second_conversation_id);
 
+    // simulate a converation update from api which introduces the attachment
+    tether
+        .tx(async |tx| {
+            Conversation {
+                remote_id: Some(changed_conversation_id.clone()),
+                attachments_metadata: vec![AttachmentMetadata {
+                    local_id: Some(
+                        Attachment::remote_id_counterpart(pub_key_attachment_id.clone(), tx)
+                            .await
+                            .unwrap()
+                            .unwrap(),
+                    ),
+                    attachment_type: AttachmentType::Remote(Some(pub_key_attachment_id.clone())),
+                    disposition: Disposition::Attachment.into(),
+                    mime_type: AttachmentMimeType::from_str("application/pgp-keys").unwrap(),
+                    filename: pub_key_filename.into(),
+                    size: 1024,
+                }],
+                ..Conversation::test_default()
+            }
+            .save(tx)
+            .await
+        })
+        .await
+        .unwrap();
     // change subject again to simulate another conv update.
     draft.set_subject("foo12345".into()).await.unwrap();
     draft.save().await.unwrap();
@@ -2336,4 +2422,19 @@ async fn draft_reply_handles_conversation_id_change_on_new_subject_from_place_ho
             .unwrap()
             .is_some()
     );
+
+    // Attachment should not be deleted by placedholder conversation deletion
+    assert!(
+        Attachment::find_by_remote_id(
+            &AttachmentType::Remote(Some(pub_key_attachment_id.clone())),
+            &tether
+        )
+        .await
+        .unwrap()
+        .is_some()
+    );
+    let attachments = DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, &tether)
+        .await
+        .unwrap();
+    assert_eq!(attachments[0].remote_id().unwrap(), pub_key_attachment_id);
 }
