@@ -1,5 +1,5 @@
 use crate::MailContextError;
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::models::{Conversation, MailSettings};
 use futures::StreamExt;
 use futures::future::BoxFuture;
@@ -351,8 +351,8 @@ impl MailEventCache {
     pub async fn calculate_missing_dependencies(
         &self,
         tether: &Tether,
-    ) -> Result<MessageOrConversationDependencyFetcher, MailContextError> {
-        let mut fetcher = MessageOrConversationDependencyFetcher::new();
+    ) -> Result<DependencyFetcher, MailContextError> {
+        let mut fetcher = DependencyFetcher::new();
         for conv in self.conversations.values() {
             fetcher.check_conversation(conv, tether).await?
         }

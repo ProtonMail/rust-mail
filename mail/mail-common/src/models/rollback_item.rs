@@ -1,6 +1,6 @@
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
-use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::datatypes::dependencies::DependencyFetcher;
 use crate::models::{Conversation, Message, MessageSyncDecision};
 use futures::stream::{FuturesOrdered, FuturesUnordered, StreamExt};
 use proton_action_queue::queue::Queue;
@@ -325,7 +325,7 @@ impl RollbackHandler for MessageRollbackHandler {
         api: &Session,
         tx_runner: &mut impl RunTransaction,
     ) -> Result<(), MailContextError> {
-        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let mut dependency_fetcher = DependencyFetcher::new();
         let tether = tx_runner.tether();
         for item in items.iter_mut() {
             dependency_fetcher
@@ -405,7 +405,7 @@ impl RollbackHandler for ConversationRollbackHandler {
         api: &Session,
         tx_runner: &mut impl RunTransaction,
     ) -> Result<(), MailContextError> {
-        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        let mut dependency_fetcher = DependencyFetcher::new();
         let tether = tx_runner.tether();
         for item in items.iter_mut() {
             dependency_fetcher
@@ -471,11 +471,41 @@ impl RollbackHandler for LabelRollbackHandler {
     }
 
     async fn fetch_and_apply_dependencies(
-        _: &mut [Self::Item],
-        _: &Session,
-        _: &mut impl RunTransaction,
+        items: &mut [Self::Item],
+        api: &Session,
+        tx_runner: &mut impl RunTransaction,
     ) -> Result<(), MailContextError> {
-        //TODO(ET-5440) - labels may have parent dependencies
+        use std::collections::HashSet;
+
+        // Collect the IDs of labels being rolled back to avoid checking them as dependencies
+        let rollback_label_ids: HashSet<LabelId> =
+            items.iter().map(|label| label.id.clone()).collect();
+
+        let mut dependency_fetcher = DependencyFetcher::new();
+        let tether = tx_runner.tether();
+        for item in items.iter_mut() {
+            // Only check parent dependency if it's not already in the rollback set
+            if let Some(parent_id) = &item.parent_id {
+                if !rollback_label_ids.contains(parent_id) {
+                    dependency_fetcher.check_label(item, tether).await?;
+                }
+            }
+        }
+
+        let unresolved_label_ids = dependency_fetcher.fetch_and_store(api, tx_runner).await?;
+
+        for item in items.iter_mut() {
+            if let Some(parent_id) = &item.parent_id {
+                if unresolved_label_ids.contains(parent_id) {
+                    warn!(
+                        "Removing unresolved parent reference {} from label {}",
+                        parent_id, item.id
+                    );
+                    item.parent_id = None;
+                }
+            }
+        }
+
         Ok(())
     }
 
