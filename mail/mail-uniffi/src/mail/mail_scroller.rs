@@ -383,7 +383,7 @@ impl ConversationScroller {
 #[uniffi_export]
 impl ConversationScroller {
     #[must_use]
-    pub fn handle(&self) -> Arc<WatchHandle> {
+    pub fn watch_handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
     }
 
@@ -525,7 +525,7 @@ impl MessageScroller {
 #[uniffi_export]
 impl MessageScroller {
     #[must_use]
-    pub fn handle(&self) -> Arc<WatchHandle> {
+    pub fn watch_handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
     }
 
@@ -668,7 +668,7 @@ impl SearchScroller {
 #[uniffi_export]
 impl SearchScroller {
     #[must_use]
-    pub fn handle(&self) -> Arc<WatchHandle> {
+    pub fn watch_handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
     }
 
