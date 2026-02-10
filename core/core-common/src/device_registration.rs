@@ -8,7 +8,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use proton_core_api::{
     service::ApiServiceError,
-    services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
+    services::proton::{ProtonCore, SessionId, prelude::RegisterDeviceRequest},
 };
 use stash::{
     exports::ToSql,
@@ -93,11 +93,7 @@ impl RegisteredDeviceTaskError {
     //
     fn is_not_fully_authenticated(&self) -> bool {
         match self {
-            RegisteredDeviceTaskError::API(ApiServiceError::OtherHttpError(
-                Status::FORBIDDEN,
-                _,
-                api_error_info,
-            )) => {
+            RegisteredDeviceTaskError::API(ApiServiceError::Forbidden(_, api_error_info)) => {
                 api_error_info.as_ref().map(|a| a.code).unwrap_or_default()
                     == MISSING_SCOPES_ERROR_CODE
             }
