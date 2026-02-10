@@ -1529,6 +1529,11 @@ sql_using_serde!(TwoFa);
 pub struct AuthScopes(Vec<String>);
 
 impl AuthScopes {
+    /// Must exist if user is authenticated
+    #[must_use]
+    pub fn full_scope() -> String {
+        "full".into()
+    }
     /// Create a new [`AuthScopes`] instance from a list of [`String`]s.
     ///
     /// TODO: Might be better to have a `From<Vec<String>>` implementation.

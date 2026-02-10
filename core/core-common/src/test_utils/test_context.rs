@@ -62,7 +62,7 @@ pub trait BaseTestContext {
 
     #[must_use]
     fn test_scopes() -> Vec<String> {
-        vec!["foo".to_owned(), "bar".to_owned()]
+        vec!["foo".to_owned(), "bar".to_owned(), "full".to_owned()]
     }
 
     #[must_use]
