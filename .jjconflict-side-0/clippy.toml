@@ -1,2 +1,0 @@
-allow-expect-in-tests = true
-doc-valid-idents = ["JetPack", ".."]

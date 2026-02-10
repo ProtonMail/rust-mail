@@ -1,7 +1,0 @@
----
-source: mail/mail-common/src/models/attachment_cache.rs
-expression: test_order(vars)
----
-name: very big but not trash or spam, anti-utility 512000
-name: spam, anti-utility 76800
-name: trash, anti-utility 76800

@@ -1,9 +1,0 @@
----
-source: core/core-common/src/tests/models/contact.rs
-expression: display_group(groups)
----
-1 keys:
-
-B (2 items)
-Contact B (#52CD96): Barbara Fox (0 addresses)
-Contact B (#A1439F): Barbara Lox (0 addresses)

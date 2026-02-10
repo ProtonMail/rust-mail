@@ -1,5 +1,0 @@
----
-source: mail/mail-common/src/draft/../tests/draft/compose.rs
-expression: result
----
-<span>Foo &lt;b&gt;bar&lt;/b&gt;</span>

@@ -1,7 +1,0 @@
----
-source: mail/mail-common/src/draft/../tests/draft/compose.rs
-expression: result
----
-                <div>
-                    <p>Pasted content</p>
-                </div>

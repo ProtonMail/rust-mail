@@ -1,6 +1,0 @@
----
-source: mail/mail-html-transformer/src/tests/utm.rs
-expression: body
----
-<a href="https://example.com">Example</a>
-        <a href="https://example.com/">Tracker Example</a>

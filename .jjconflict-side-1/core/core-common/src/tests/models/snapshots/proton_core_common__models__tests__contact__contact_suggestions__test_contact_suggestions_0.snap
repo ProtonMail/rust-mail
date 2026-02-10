@@ -1,5 +1,0 @@
----
-source: core/core-common/src/tests/models/contact.rs
-expression: display_suggestions(res)
----
-0 suggestions:

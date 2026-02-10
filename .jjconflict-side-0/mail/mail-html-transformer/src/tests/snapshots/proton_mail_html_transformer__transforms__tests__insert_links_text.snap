@@ -1,6 +1,0 @@
----
-source: mail/mail-html-transformer/src/tests/transforms.rs
-expression: html.to_string()
-snapshot_kind: text
----
-<html><head></head><body><pre><br> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Intro,<br><br><html>Blah blabh blah, find reports at <a href="https://proton.me/" rel="noreferrer">https://proton.me/</a> etc.. </html><br><br> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;See also:<br><html>* <a href="https://127.0.0.1/" rel="noreferrer">https://127.0.0.1/</a> </html><br><html>* <a href="https://ads.com/" rel="noreferrer">https://ads.com/</a> </html><br><html><html>* httpssp://ads.com?utm_source=tracker </html></html><br><html><html>* httpsp://ads.com?utm_source=tracker </html></html><br> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;* mailto:foo@bar<br><br> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Outro<br><br> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</pre></body></html>

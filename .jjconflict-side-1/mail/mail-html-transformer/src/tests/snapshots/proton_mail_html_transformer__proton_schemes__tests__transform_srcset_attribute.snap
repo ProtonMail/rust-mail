@@ -1,9 +1,0 @@
----
-source: mail/mail-html-transformer/src/tests/proton_schemes.rs
-expression: transformer.to_string()
----
-<html><head></head><body>
-            <img srcset="proton-https://example.com/small.jpg 480w, proton-https://example.com/large.jpg 800w">
-        
-    
-    </body></html>

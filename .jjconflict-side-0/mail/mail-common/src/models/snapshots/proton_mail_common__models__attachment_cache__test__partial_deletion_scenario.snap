@@ -1,6 +1,0 @@
----
-source: mail/mail-common/src/models/attachment_cache.rs
-expression: "test_order_with_bytes(vars, 250_000)"
----
-name: second_delete_me, anti-utility 1024000
-name: first_delete_me, anti-utility 512000

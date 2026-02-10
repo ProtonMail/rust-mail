@@ -1,3 +1,0 @@
-# Bitfields
-
-Public Bitfields API.

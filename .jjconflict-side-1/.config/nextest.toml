@@ -1,4 +1,0 @@
-[profile.default]
-# Warning about slow test after 30s.
-# Terminating the test after 5min (10 * 30s)
-slow-timeout = { period = "30s", terminate-after = 10 }

@@ -1,5 +1,0 @@
----
-source: proton-mail-html-transformer/tests/et-1207.rs
-expression: processed
----
-<html><head></head><body><pre><br>Test &nbsp;test<br>test<br><br>Sent with Proton Mail secure email.<br><br>------- Original Message -------<br><br>&gt; This is a quote<br></pre></body></html>

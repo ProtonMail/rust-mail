@@ -1,1 +1,0 @@
-ALTER TABLE messages ADD COLUMN display_snooze_reminder INTEGER DEFAULT 0;

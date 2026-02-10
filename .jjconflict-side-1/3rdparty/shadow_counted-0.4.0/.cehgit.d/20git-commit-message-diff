@@ -1,7 +1,0 @@
-#!/bin/bash
-## append diffs as comments to the commit message
-require git
-
-git_hook_matches prepare-commit-msg || return 0
-
-git diff --cached -U1 | awk 'BEGIN {print} /^[@+-]/{print "# "$0}' >>"$1"
