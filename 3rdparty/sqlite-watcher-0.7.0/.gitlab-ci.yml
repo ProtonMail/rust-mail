@@ -1,0 +1,31 @@
+default:
+  image: rust:1.88
+
+stages:
+  - lint
+  - build
+  - test
+
+
+fmt-check:
+    stage: lint
+    script:
+        - rustup component add rustfmt
+        - cargo fmt --check
+
+clippy-check:
+    stage: lint
+    script:
+        - rustup component add clippy
+        - cargo clippy --all-features -- -D warnings
+
+build:
+  stage: build
+  script:
+    - cargo build --all-features
+
+test:
+  stage: test
+  script:
+    - cargo test --all-features
+

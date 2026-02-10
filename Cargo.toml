@@ -107,7 +107,7 @@ rusqlite = { version = "0.32.1", features = [
   "trace",
   "uuid",
 ] }
-sqlite-watcher = { version = "0.5.1", features = ["rusqlite"] }
+sqlite-watcher = { version = "0.7.0", features = ["rusqlite"] }
 slotmap = "1.0.7"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

@@ -1,0 +1,50 @@
+[package]
+name = "sqlite-watcher"
+version = "0.7.0"
+edition = "2024"
+description = "Building blocks to observe database table changes in sqlite3"
+license = "AGPL-3.0-only"
+categories = ["database"]
+keywords = ["sqlite3", "invalidation", "tracking", "watcher"]
+authors = ["Leander Beernaert <lbb-dev@pm.me>"]
+readme = "README.md"
+repository = "https://gitlab.com/AngryPixel/sqlite-watcher"
+homepage = "https://gitlab.com/AngryPixel/sqlite-watcher"
+
+[dependencies]
+fixedbitset = "0.5.7"
+slotmap = "1.1.1"
+parking_lot = "0.12.5"
+tracing = "0.1.44"
+oneshot = "0.1.13"
+thiserror = "2.0.18"
+flume = "0.12.0"
+rusqlite = { version = ">=0.32.1", optional = true }
+sqlx = { version = "0.8.6", default-features = false, features = [
+  "sqlite",
+], optional = true }
+diesel = { version = "2.2", default-features = false, features = [
+  "sqlite",
+], optional = true }
+
+[dev-dependencies]
+tempfile = "3.25.0"
+tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync"] }
+tracing-subscriber = "0.3.22"
+
+[features]
+default = []
+rusqlite = ["dep:rusqlite"]
+sqlx = ["dep:sqlx"]
+diesel = ["dep:diesel"]
+
+[lints.clippy]
+pedantic = "deny"
+
+[[example]]
+name = "rusqlite"
+required-features = ["rusqlite"]
+
+[[example]]
+name = "sqlx"
+required-features = ["sqlx"]
