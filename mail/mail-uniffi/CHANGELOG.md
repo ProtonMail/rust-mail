@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.161.26] - 2026-02-10
+
+### Fixes
+
+- [ET-5853] 2fa checking and device registration
+
+
 ## [mail-uniffi-v0.161.25] - 2026-02-06
 
 ### Fixes
