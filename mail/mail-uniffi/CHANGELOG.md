@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.163.0] - 2026-02-10
+
+### Changed
+
+- Update uniffi to v0.31.0
+- [Breaking] Rename scroller `handle()` to `watch_handle()`
+
+### Features
+
+- [FOUN-281] Upgrade proton-foundation-search to 1.1.1
+- [ET-5787] Add label dependency fetching for rollback items
+
+### Fixes
+
+- Clippy lints
+
+
 ## [mail-uniffi-v0.161.25] - 2026-02-06
 
 ### Fixes
@@ -26,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Permanently enable rebase feature
 - Replace DefaultDb with UserDb
 - Migrate migrations to explicit userDb type
 - Add Stash marker generic attribute
@@ -33,6 +51,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add AccountDb marker to account related models
 - Make database attribute required
 - Make action-queue database marker agnostic
+
+### Features
+
+- [FOUN-281] Integrate foundation search to augment search search(mail-search create)
+- Enable v6 event loop
+- [ET-5684] Track deleted items when they could be accidentaly refeched
+
+### Fixes
+
+- [ET-5697] Logout on event_poll when API resp 401/403
+- [ET-5697] Prevent device_registration from failing on session operations such as refresh
+- [ET-5697] Add invalidation of user session within `on_session_deleted`
+- [ET-5697] Add logout_and_clear within core context's `on_session_delete` handle
+- Remove delinquent check
 
 
 ## [mail-uniffi-v0.161.23] - 2026-02-03
@@ -75,30 +107,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-5715] When the sender is BYOE do not display privacy locks
 - Sanitize image-set correctly even when its malformed
 
 
 ## [mail-uniffi-v0.162.0] - 2026-01-26
 
-### Changed
-
-- Permanently enable rebase feature
-
 ### Features
 
-- [FOUN-281] Integrate foundation search to augment search search(mail-search create)
-- Enable v6 event loop
-- [ET-5684] Track deleted items when they could be accidentaly refeched
 - Breaking - expose TaskCancelled in uniffi
-
-### Fixes
-
-- [ET-5697] Logout on event_poll when API resp 401/403
-- [ET-5697] Prevent device_registration from failing on session operations such as refresh
-- [ET-5715] When the sender is BYOE do not display privacy locks
-- [ET-5697] Add invalidation of user session within `on_session_deleted`
-- [ET-5697] Add logout_and_clear within core context's `on_session_delete` handle
-- Remove delinquent check
 
 
 ## [mail-uniffi-v0.161.17] - 2026-01-22
