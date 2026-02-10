@@ -59,6 +59,7 @@ url = { workspace = true }
 zeroizing-alloc = { workspace = true }
 
 [features]
+default = []
 # Foundation Search: Local body text search indexing
 # When enabled, message bodies are indexed locally for offline full-text search.
 foundation_search = ["proton-mail-common/foundation_search"]

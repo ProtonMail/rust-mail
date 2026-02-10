@@ -22,10 +22,10 @@ mod rsvp;
 pub mod search;
 mod send_queries;
 mod sidebar;
-pub mod snooze;
+mod snooze;
 mod tracker_service;
-pub mod traits;
-pub mod upsell_eligibility_watcher;
+mod traits;
+mod upsell_eligibility_watcher;
 mod user_context;
 
 #[cfg(feature = "test-utils")]

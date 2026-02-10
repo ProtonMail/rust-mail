@@ -113,21 +113,16 @@ impl EventSubscriber<MailEventSourceV6> for MailEventV6Subscriber {
                     if let Some(ref events) = event.messages {
                         debug!("Handling message events");
                         for event in events {
-                            let action = event.action.into();
-                            let local_id = Message::handle_event(
+                            if let Some(id) = Message::handle_event(
                                 tx,
                                 &event.id,
-                                action,
+                                event.action.into(),
                                 cache.get_message(&event.id),
                                 &mut changeset,
                                 &unresolved_label_ids,
                             )
-                            .await?;
-
-                            // Search indexing is handled inline within Message::handle_event()
-                            // in the same transaction to avoid race conditions
-
-                            if let Some(id) = local_id {
+                            .await?
+                            {
                                 post_event_data.msg_for_prefetch.push(id);
                             }
                         }

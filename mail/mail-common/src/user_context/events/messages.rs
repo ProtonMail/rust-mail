@@ -14,7 +14,7 @@ pub async fn handle_message_events(
     unresolved_label_ids: &HashSet<LabelId>,
 ) -> Result<(), AppError> {
     for event in events {
-        let local_id = Message::handle_event(
+        if let Some(id) = Message::handle_event(
             tx,
             &event.remote_id,
             event.action,
@@ -22,9 +22,8 @@ pub async fn handle_message_events(
             rebase_change_set,
             unresolved_label_ids,
         )
-        .await?;
-
-        if let Some(id) = local_id {
+        .await?
+        {
             data.msg_for_prefetch.push(id);
         }
     }

@@ -12,7 +12,7 @@ use proton_mail_search::{FoundEntry, MailSearchService};
 use stash::orm::Model;
 use stash::stash::Tether;
 
-use crate::ProtonMailError;
+use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 
@@ -103,12 +103,12 @@ pub async fn search_local_with_keywords(
     search_service: &MailSearchService,
     tether: &Tether,
     keywords: &str,
-) -> Result<Vec<LocalSearchResult>, ProtonMailError> {
+) -> Result<Vec<LocalSearchResult>, MailContextError> {
     // Get raw results from the search engine
     let found_entries = search_service
         .search_local_with_metadata(keywords)
         .await
-        .map_err(|e| ProtonMailError::from(e.into_inner()))?;
+        .map_err(|e| MailContextError::from(e.into_inner()))?;
 
     let mut results: Vec<LocalSearchResult> = Vec::new();
 
@@ -126,7 +126,7 @@ pub async fn search_local_with_keywords(
 async fn process_found_entry(
     found: FoundEntry,
     tether: &Tether,
-) -> Result<Option<LocalSearchResult>, ProtonMailError> {
+) -> Result<Option<LocalSearchResult>, MailContextError> {
     let identifier = found.identifier().to_string();
     let score = f64::from(found.score());
 
