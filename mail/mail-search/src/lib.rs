@@ -41,65 +41,38 @@
 mod engine;
 mod error;
 
-// Foundation Search engine (requires proton-foundation-search crate)
-#[cfg(feature = "foundation_search")]
+// Migrations (internal only, used by MailSearchService::new)
 mod foundation;
 pub mod intent;
 mod migrations;
-#[cfg(feature = "foundation_search")]
 mod service;
 mod storage;
 pub mod traits;
 mod watcher;
-#[cfg(feature = "foundation_search")]
 mod worker;
 
-// Core types (always available)
+// Core types
 pub use engine::{CleanupResult, IndexResult, SearchStats};
 pub use error::SearchError;
 pub use intent::{LocalMessageId, SearchIndexIntent, SearchOperation};
+pub use traits::{MessageDataProvider, MessageMetadata};
+
+pub use foundation::FoundationSearchEngine;
+
+pub use traits::BlobStorage;
+
+pub use service::{IndexStats, MailSearchService, SearchServiceError};
+
 pub use storage::StashBlobStorage;
-pub use traits::{BlobStorage, MessageDataProvider, MessageMetadata};
+
 pub use watcher::SearchIndexIntentWatcher;
 
-// Foundation Search types (require feature flag)
-#[cfg(feature = "foundation_search")]
-pub use foundation::FoundationSearchEngine;
-#[cfg(feature = "foundation_search")]
-pub use proton_foundation_search::query::results::FoundEntry;
-#[cfg(feature = "foundation_search")]
-pub use service::{IndexStats, MailSearchService, SearchServiceError};
-#[cfg(feature = "foundation_search")]
 pub use worker::SearchIndexWorker;
+
+pub use proton_foundation_search::query::results::FoundEntry;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn test_index_result() {
-        let needs = IndexResult::needs_cleanup();
-        assert!(needs.cleanup_needed);
-
-        let no_cleanup = IndexResult::no_cleanup();
-        assert!(!no_cleanup.cleanup_needed);
-    }
-
-    #[test]
-    fn test_search_error_display() {
-        let err = SearchError::EngineBusy;
-        assert_eq!(err.to_string(), "Search engine is busy");
-
-        let err = SearchError::InvalidQuery("bad query".to_string());
-        assert_eq!(err.to_string(), "Invalid query: bad query");
-
-        let err = SearchError::Panic("test panic".to_string());
-        assert_eq!(err.to_string(), "Engine panic: test panic");
-    }
-}
-
-#[cfg(all(test, feature = "foundation_search"))]
-mod foundation_tests {
     use super::*;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
@@ -350,8 +323,8 @@ mod foundation_tests {
         assert_eq!(intents.len(), 5, "Should have 5 intents queued");
 
         // 6. Create worker and process batch through the full worker flow
-        // This tests: intent system -> worker -> prepare_message_for_indexing ->
-        // batch indexing -> spawn_blocking -> channel-based I/O -> atomic blob saves
+        // This tests: intent system → worker → prepare_message_for_indexing →
+        // batch indexing → spawn_blocking → channel-based I/O → atomic blob saves
         let watcher_handle = crate::watcher::SearchIndexIntentWatcher::watch(&stash)
             .await
             .unwrap();
@@ -378,7 +351,7 @@ mod foundation_tests {
             "All intents should be deleted after successful processing by worker"
         );
 
-        // 8. Verify messages are searchable
+        // 9. Verify messages are searchable
         let results = search_service
             .search_local_with_metadata("project")
             .await
@@ -401,7 +374,7 @@ mod foundation_tests {
             "Should find at least 1 message with 'meeting'"
         );
 
-        // 9. Verify stats are accessible (just checking the method works)
+        // 8. Verify stats are accessible (just checking the method works)
         let _stats = search_service.get_stats().await;
 
         // Verify search results prove indexing worked (more reliable than stats)
@@ -456,5 +429,26 @@ mod foundation_tests {
         // Removing a message that was never indexed should succeed
         let result = engine.remove_message("nonexistent-msg").await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_index_result() {
+        let needs = IndexResult::needs_cleanup();
+        assert!(needs.cleanup_needed);
+
+        let no_cleanup = IndexResult::no_cleanup();
+        assert!(!no_cleanup.cleanup_needed);
+    }
+
+    #[test]
+    fn test_search_error_display() {
+        let err = SearchError::EngineBusy;
+        assert_eq!(err.to_string(), "Search engine is busy");
+
+        let err = SearchError::InvalidQuery("bad query".to_string());
+        assert_eq!(err.to_string(), "Invalid query: bad query");
+
+        let err = SearchError::Panic("test panic".to_string());
+        assert_eq!(err.to_string(), "Engine panic: test panic");
     }
 }
