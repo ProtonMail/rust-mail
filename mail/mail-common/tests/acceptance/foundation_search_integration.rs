@@ -1,34 +1,29 @@
-#[cfg(feature = "foundation_search")]
 #[allow(clippy::module_inception)]
 mod foundation_search_integration {
-    use proton_core_api::services::proton::LabelId;
     use proton_core_api::services::proton::prelude::{Action, EventId};
     use proton_core_common::datatypes::SystemLabel;
     use proton_core_common::models::ModelIdExtension;
     use proton_mail_api::services::proton::common::MessageId;
     use proton_mail_api::services::proton::response_data::{MailEvent, MessageEvent};
     use proton_mail_common::api_message_meta;
-    use proton_mail_common::datatypes::{SearchOptions, SystemLabelId};
     use proton_mail_common::models::Message;
-    use proton_mail_common::test_utils::scroller::TestScroller;
     use proton_mail_common::test_utils::{
         init::Params as TestParams,
         test_context::{MailTestContext, MailUserContextTestExtension},
     };
-    use proton_mail_search::SearchIndexIntent;
+    use proton_mail_search::{SearchIndexIntent, SearchOperation};
+    use stash::orm::Model;
 
-    /// Integration test for Foundation Search with mail scroller
+    /// Integration test for Foundation Search indexing via message events
     ///
-    /// This test exercises the complete end-to-end flow:
+    /// This test exercises the event-to-intent flow:
     /// 1. Create messages via events (triggers search indexing inline in transaction)
-    /// 2. Verify search indexing intents were queued (proving inline indexing works)
-    /// 3. Verify mail scroller can be created with search options (proving integration)
+    /// 2. Verify messages were persisted
+    /// 3. Verify search indexing intents were queued with correct operations and message IDs
     ///
-    /// This test validates that the integration between message creation, search indexing,
-    /// and the mail scroller works correctly. The actual indexing and search functionality
-    /// is tested separately in `proton-mail-search` crate.
+    /// The actual indexing, search, and scroller integration are tested separately.
     #[tokio::test]
-    async fn test_foundation_search_integration_with_mail_scroller() {
+    async fn test_search_indexing_intents_queued_on_message_events() {
         let ctx = MailTestContext::new().await;
         let params = TestParams::default_basic();
         let conversation = params.conversations.first().cloned().unwrap();
@@ -58,13 +53,6 @@ mod foundation_search_integration {
             label_ids: vec![SystemLabel::AllMail.remote_id()],
             subject: "Budget meeting scheduled".to_string()
         );
-
-        // Mock search API endpoint to return empty results (since message bodies may not be indexed yet)
-        ctx.mock_get_messages()
-            .given_label_id(&LabelId::almost_all_mail())
-            .alter(|mock| mock.expect(1))
-            .respond_with(vec![])
-            .await;
 
         ctx.mock_ping_success().await;
         ctx.setup_user(params.clone()).await;
@@ -104,55 +92,52 @@ mod foundation_search_integration {
             .await
             .unwrap();
 
-        // Step 2: Verify messages were created
+        // Step 2: Verify messages were created and collect their local IDs
         let tether = user_ctx.user_stash().connection().await.unwrap();
-        let _msg1 = Message::find_by_remote_id(message1.id.clone(), &tether)
+        let msg1 = Message::find_by_remote_id(message1.id.clone(), &tether)
             .await
             .unwrap()
             .expect("Message 1 should exist");
-        let _msg2 = Message::find_by_remote_id(message2.id.clone(), &tether)
+        let msg2 = Message::find_by_remote_id(message2.id.clone(), &tether)
             .await
             .unwrap()
             .expect("Message 2 should exist");
-        let _msg3 = Message::find_by_remote_id(message3.id.clone(), &tether)
+        let msg3 = Message::find_by_remote_id(message3.id.clone(), &tether)
             .await
             .unwrap()
             .expect("Message 3 should exist");
 
-        // Step 3: Verify search indexing intents were queued
+        let expected_local_ids: Vec<u64> =
+            vec![msg1.id().as_u64(), msg2.id().as_u64(), msg3.id().as_u64()];
+
+        // Step 3: Verify search indexing intents were queued correctly
         let intents = SearchIndexIntent::get_pending_batch(&tether, 10)
             .await
             .unwrap();
+
         assert_eq!(
             intents.len(),
             3,
             "Should have 3 search indexing intents queued after message creation"
         );
 
-        // Step 4: Verify the integration path works
-        // The intents will be processed by the worker in the background.
-        // For this test, we verify that:
-        // 1. Messages were created successfully
-        // 2. Search indexing intents were queued (proving the inline indexing works)
-        // 3. The mail scroller can be created with search options (proving integration)
+        // Verify all intents are Index operations
+        for intent in &intents {
+            assert_eq!(
+                intent.operation,
+                SearchOperation::Index,
+                "All intents from Create events should be Index operations"
+            );
+        }
 
-        // Step 5: Verify mail scroller can be created with search options
-        // This tests that the integration works end-to-end
-        let page_size = 10;
-        let mut test_scroller =
-            TestScroller::search(&user_ctx, SearchOptions::from("project"), page_size)
-                .await
-                .unwrap();
-
-        // The scroller should be created successfully (even if results are empty)
-        // This verifies the integration path works without errors
-        test_scroller.fetch_more_and_wait().await.unwrap();
-        let items = test_scroller.items();
-        // Note: Results may be empty if message bodies haven't been stored yet or worker hasn't processed intents,
-        // but the test verifies the integration path works without errors
-        assert!(
-            items.len() <= 3,
-            "Scroller should return at most 3 results (one per message)"
-        );
+        // Verify the intent message IDs match the created messages' local IDs
+        let intent_message_ids: Vec<u64> = intents.iter().map(|i| i.message_id).collect();
+        for expected_id in &expected_local_ids {
+            assert!(
+                intent_message_ids.contains(expected_id),
+                "Intent for local message ID {} should exist",
+                expected_id
+            );
+        }
     }
 }

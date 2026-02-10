@@ -653,31 +653,14 @@ impl MessageScroller {
 pub struct SearchScroller {
     scroller: Arc<RealMailScroller<RealMessage>>,
     handle: Arc<WatchHandle>,
-    #[cfg(feature = "foundation_search")]
-    ctx: Arc<MailUserContext>,
 }
 
 impl SearchScroller {
     #[must_use]
-    #[cfg(not(feature = "foundation_search"))]
     pub(crate) fn new(scroller: RealMailScroller<RealMessage>, handle: Arc<WatchHandle>) -> Self {
         Self {
             scroller: Arc::new(scroller),
             handle,
-        }
-    }
-
-    #[must_use]
-    #[cfg(feature = "foundation_search")]
-    pub(crate) fn new(
-        scroller: RealMailScroller<RealMessage>,
-        handle: Arc<WatchHandle>,
-        ctx: Arc<MailUserContext>,
-    ) -> Self {
-        Self {
-            scroller: Arc::new(scroller),
-            handle,
-            ctx,
         }
     }
 }

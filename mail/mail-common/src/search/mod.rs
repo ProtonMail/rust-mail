@@ -6,23 +6,16 @@
 //!
 //! The search service, worker, and other components are now in `proton-mail-search` crate.
 //! This module only contains the mail-common specific wiring.
-//!
-//! Requires the `foundation_search` feature to be enabled.
 
-#[cfg(feature = "foundation_search")]
 pub mod data_provider;
 
-#[cfg(feature = "foundation_search")]
 pub mod search_results;
 
-#[cfg(feature = "foundation_search")]
 pub use data_provider::StashMessageDataProvider;
 
-#[cfg(feature = "foundation_search")]
 pub use search_results::{LocalSearchResult, SearchMatchPosition, search_local_with_keywords};
 
 // Re-export from proton-mail-search crate for convenience
-#[cfg(feature = "foundation_search")]
 pub use proton_mail_search::{
     BlobStorage, CleanupResult, FoundEntry, FoundationSearchEngine, IndexResult, IndexStats,
     LocalMessageId, MailSearchService, MessageDataProvider, SearchError, SearchIndexIntent,
