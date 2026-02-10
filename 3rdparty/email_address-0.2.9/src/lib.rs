@@ -487,7 +487,6 @@ const LPAREN: char = '(';
 #[allow(dead_code)]
 const RPAREN: char = ')';
 
-const DISPLAY_SEP: &str = " <";
 const DISPLAY_START: char = '<';
 const DISPLAY_END: char = '>';
 
@@ -979,17 +978,21 @@ fn split_parts(address: &str) -> Result<(&str, &str, &str), Error> {
 }
 
 fn split_display_email(text: &str) -> Result<(&str, &str), Error> {
-    match text.rsplit_once(DISPLAY_SEP) {
+    match text.rsplit_once(DISPLAY_START) {
         None => Ok(("", text)),
         Some((left, right)) => {
             let right = right.trim();
             if !right.ends_with(DISPLAY_END) {
-                Err(Error::MissingEndBracket)
+                Ok(("", text))
             } else {
-                let email = &right[0..right.len() - 1];
                 let display_name = left.trim();
-
-                Ok((display_name, email))
+                if display_name.is_empty() {
+                    // treat as plain email, '<' to be validated as an invalid character later
+                    Ok(("", text))
+                } else {
+                    let email = &right[0..right.len() - 1];
+                    Ok((display_name, email))
+                }
             }
         }
     }
@@ -1897,6 +1900,20 @@ mod tests {
     fn test_parse_display_name() {
         let email = EmailAddress::parse_with_options(
             "Simons Email <simon@example.com>",
+            Options::default(),
+        )
+        .unwrap();
+
+        assert_eq!(email.display_part(), "Simons Email");
+        assert_eq!(email.email(), "simon@example.com");
+        assert_eq!(email.local_part(), "simon");
+        assert_eq!(email.domain(), "example.com");
+    }
+
+    #[test]
+    fn test_parse_display_name_without_whitespace() {
+        let email = EmailAddress::parse_with_options(
+            "Simons Email<simon@example.com>",
             Options::default(),
         )
         .unwrap();
