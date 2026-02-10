@@ -1,0 +1,24 @@
+[package]
+name = "uniffi-macros"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+cruet = "0.14.0"
+
+[dev-dependencies]
+uniffi = { workspace = true }
+
+[dependencies.syn]
+version = "2.0.96"
+features = ["fold", "visit-mut"]
+
+[lints]
+workspace = true

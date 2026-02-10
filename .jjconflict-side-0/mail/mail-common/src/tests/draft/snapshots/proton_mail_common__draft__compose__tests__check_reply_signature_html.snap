@@ -1,0 +1,6 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: draft.body()
+snapshot_kind: text
+---
+<html><head></head><body><br><br><br><div class="protonmail_signature_block-user"></div><div class="protonmail_quote"><br><br>-------- Original Message --------<br>On Thursday, 01/01/70 at 00:00 Send InToVoid &lt;sender@void.org&gt; wrote:<br><blockquote class="protonmail_quote">Hello World</blockquote></div></body></html>

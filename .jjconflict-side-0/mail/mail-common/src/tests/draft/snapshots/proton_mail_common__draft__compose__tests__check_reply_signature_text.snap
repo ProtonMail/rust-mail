@@ -1,0 +1,8 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: draft.decrypted_body.body
+snapshot_kind: text
+---
+-------- Original Message --------
+On Thursday, 01/01/70 at 00:00 Send InToVoid <sender@void.org> wrote:
+Hello World

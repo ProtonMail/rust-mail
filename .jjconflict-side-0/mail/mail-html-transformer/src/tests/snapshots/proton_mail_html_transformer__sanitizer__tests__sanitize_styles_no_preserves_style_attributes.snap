@@ -1,0 +1,5 @@
+---
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
+expression: result
+---
+<html><head></head><body><p style="color: red" bgcolor="blue">Hello</p></body></html>

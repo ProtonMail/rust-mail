@@ -1,0 +1,80 @@
+---
+source: mail/mail-html-transformer/src/tests/remote_content.rs
+expression: transformer.to_string()
+---
+<!DOCTYPE html><html lang="en"><head profile="http://www.w3.org/2005/10/profile">
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="seconds; foo://bar.com">
+    <title>Title</title>
+    <style>:root {
+  --bar: "/tmp/foo.png";
+  --foo: --bar;
+  --url: --foo;
+  --inline: "javascript:console.log(bar);";
+}
+
+body {
+  background: #00d url("") no-repeat fixed;
+}
+
+ul {
+  list-style: url("");
+}
+
+div {
+}
+
+div > ul {
+  list-style: url("");
+}
+
+tr > ul {
+  list-style: url("");
+}
+
+div {
+  background: proton-image-set() center / cover no-repeat;
+}
+</style>
+</head>
+<body>
+<img srcset="">
+<a href="javascript:console.log('foo')">foo</a>
+<img src="">
+<img alt="" src="" style="width:36pt;height:36pt">
+<img src="">
+<img src="" longdesc="unknown://fadf.com">
+
+<blockquote cite="">foo</blockquote>
+<blockquote cite="">foo</blockquote>
+
+<form action="">
+    <button formaction="">foo</button>
+</form>
+
+<div style="background: url(javascript:console.log('hello'))"> invalid_css_style</div>;
+<div style="background: url(&quot;&quot;)"> valid_css_style</div>;
+
+<img src="">
+<img src="">
+<img src="">
+<img src="">
+<img src="">
+<video src="">cid_invalid</video>
+<div style="background: proton-image-set() center / cover no-repeat">
+    inline image set
+</div>
+
+<video poster="">invalid_url</video>
+
+<!-- Mailto URL tests -->
+<a href="mailto:user@example.com">Valid mailto</a>
+<a href="mailto:test@proton.me?subject=Test&amp;body=Hello">Mailto with params</a>
+<a href="mailto:user+tag@domain.co.uk">Mailto with plus and TLD</a>
+<img src="">Mailto in src attribute (should be stripped)
+<div style="background: url(&quot;&quot;)">Mailto in CSS (should be stripped)</div>
+<form action="">Mailto in form action (should be stripped)</form>
+<blockquote cite="">Mailto in cite (should be stripped)</blockquote>
+
+
+</body></html>

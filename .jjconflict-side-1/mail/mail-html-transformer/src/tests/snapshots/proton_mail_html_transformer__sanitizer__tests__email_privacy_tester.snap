@@ -1,0 +1,52 @@
+---
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
+expression: html
+snapshot_kind: text
+---
+<!DOCTYPE html><html lang="en-GB"><head>
+      
+      
+      
+      <title>Email Privacy Tester</title>
+      
+      
+      
+      
+      
+      
+      
+   </head>
+   <body>
+      <p style="border-bottom: 1px solid #000; padding-bottom: 1em">
+         <span style="font-size: 1.4em; border-bottom: 1px solid #333">Email Privacy Tester</span><br><br>This is your test email from the Email Privacy Tester. Please ignore everything after this line. Clicking on anything will skew the results.
+      </p>
+      <p style="background-image: url(&quot;&quot;)"></p>
+      <p style="content: url(&quot;&quot;)"></p>
+      <p style="behavior: url(&quot;&quot;) url(&quot;&quot;)"></p>
+      <style type="text/css"></style>
+      <style type="text/css"></style>
+      <div id="cssEscape"></div>
+      <style type="text/css"></style>
+      
+         
+      
+      <span></span><img width="16" height="16"><img width="16" height="16"><a href="http://code.anchor-test.ept.emailprivacytester.com"></a>
+      
+      
+      <video width="1" height="1"></video>
+      <video width="1" height="1">
+         <source type="video/mp4; codecs=&quot;avc1.4D401E, mp4a.40.2&quot;">
+         <source type="video/webm; codecs=&quot;vp8.0, vorbis&quot;">
+         <source type="video/ogg; codecs=&quot;theora, vorbis&quot;">
+      </video>
+      <audio preload="metadata" width="1" height="1"></audio>
+      <span></span><span></span>
+      <p style="background-color: expression((document. createElement(&quot;img&quot;)) [&quot;src&quot;] = basecssExpression)"></p>
+      
+         
+         
+      
+      <span></span>
+   
+
+</body></html>

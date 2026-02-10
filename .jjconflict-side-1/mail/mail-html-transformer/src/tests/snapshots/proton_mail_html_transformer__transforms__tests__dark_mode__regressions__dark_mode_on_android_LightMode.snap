@@ -1,0 +1,51 @@
+---
+source: mail/mail-html-transformer/src/tests/dark_mode.rs
+expression: html.to_string()
+---
+<html data-protonmail-message="true"><head>
+
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+
+<style type="text/css" style="display:none;"> P {margin-top:0;margin-bottom:0;} </style>
+
+<style type="text/css">mark {
+    background-color: var(--bgcolor-mark, #ff0);
+    color: var(--color-mark, currentColor);
+}
+
+a:link {
+    color: var(--primary);
+}
+
+blockquote {
+    border-color: var(--primary) !important;
+}
+
+:root {
+    /**
+	  If we want to follow some app themes, we have to inject values and/or update --primary for link/blockquote
+
+	--background-norm: white;
+	--text-norm: #262a33;
+    */
+
+    --primary: #8a6eff;
+}
+
+body {
+    background: var(--background-norm, Canvas);
+    color: var(--text-norm, CanvasText);
+}
+body {
+    color-scheme: light;
+}</style></head>
+
+<body dir="ltr">
+
+<div class="elementToProof" style="font-family: Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+
+This is a single line message</div>
+
+
+
+</body></html>

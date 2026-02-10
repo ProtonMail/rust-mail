@@ -1,0 +1,6 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: signature
+snapshot_kind: text
+---
+My Default Signature

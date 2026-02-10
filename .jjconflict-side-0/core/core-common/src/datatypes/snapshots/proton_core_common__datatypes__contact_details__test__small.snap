@@ -1,0 +1,17 @@
+---
+source: core/core-common/src/datatypes/contact_details.rs
+expression: get_vcard(small)
+---
+VCARD:
+BEGIN:VCARD
+VERSION:4.0
+PRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN
+FN:Anonymous
+UID:proton-autosave-fe9bcd4d-c797-4e43-b22a-807354d7824e
+item1.EMAIL;PREF=1:anonymous@pm.me
+END:VCARD
+
+---------------------------
+
+Sorted fields:
+Emails([ContactDetailsEmail { email_type: [], email: aXXXXXXXX@XXXXX, groups: [] }])

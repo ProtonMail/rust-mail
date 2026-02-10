@@ -1,0 +1,23 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: 'hello world'
+  expression: 'hello world'
+    or_seq: 'hello world'
+      and_seq: 'hello world'
+        primary_expr: 'hello'
+          term_expr: 'hello'
+            simple_term: 'hello'
+              value: 'hello'
+                STRING: 'hello'
+                  UNQUOTED_STRING: 'hello'
+                    USTRING: 'hello'
+        primary_expr: 'world'
+          term_expr: 'world'
+            simple_term: 'world'
+              value: 'world'
+                STRING: 'world'
+                  UNQUOTED_STRING: 'world'
+                    USTRING: 'world'
+  EOI: ''

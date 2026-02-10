@@ -1,0 +1,11 @@
+---
+source: mail/mail-html-transformer/src/tests/remote_content.rs
+expression: html.to_string()
+snapshot_kind: text
+---
+<html><head></head><body>
+        <img id="1" src="https://mail.proton.me/api/core/v4/images?UID=MYTOKEN123&amp;Url=bad+url">
+        <img id="2" src="https://mail.proton.me/api/core/v4/images?UID=MYTOKEN123&amp;Url=https%3A%2F%2Fads.com">
+        <img id="2" src="https://mail.proton.me/api/core/v4/images?UID=MYTOKEN123&amp;Url=https%3A%2F%2Fads.com%3Futm_source%3Dtracker">
+        
+        </body></html>

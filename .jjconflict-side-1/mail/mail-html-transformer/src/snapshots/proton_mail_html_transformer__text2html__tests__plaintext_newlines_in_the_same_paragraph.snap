@@ -1,0 +1,5 @@
+---
+source: mail/mail-html-transformer/src/text2html.rs
+expression: output
+---
+<body><span>Hallo</span><div><span>World</span></div><div><br></div><div><span>Today</span></div></body>

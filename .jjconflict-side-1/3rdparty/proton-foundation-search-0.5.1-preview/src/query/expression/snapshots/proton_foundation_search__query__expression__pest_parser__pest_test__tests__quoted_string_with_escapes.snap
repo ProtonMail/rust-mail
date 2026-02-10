@@ -1,0 +1,20 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: '"hello\nworld\ttab"'
+  expression: '"hello\nworld\ttab"'
+    or_seq: '"hello\nworld\ttab"'
+      and_seq: '"hello\nworld\ttab"'
+        primary_expr: '"hello\nworld\ttab"'
+          term_expr: '"hello\nworld\ttab"'
+            simple_term: '"hello\nworld\ttab"'
+              value: '"hello\nworld\ttab"'
+                STRING: '"hello\nworld\ttab"'
+                  QUOTED_STRING: '"hello\nworld\ttab"'
+                    QSTRING: 'hello'
+                    ESCAPED_CHAR: '\n'
+                    QSTRING: 'world'
+                    ESCAPED_CHAR: '\t'
+                    QSTRING: 'tab'
+  EOI: ''

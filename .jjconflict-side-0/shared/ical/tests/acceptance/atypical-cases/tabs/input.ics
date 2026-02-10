@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+PRODID:-//Proton AG//ProtonCalendar 1.0.0//EN
+VERSION:2.0
+BEGIN:VEVENT
+ORGANIZER;CN="The	Eleventh, Doctor";SENT-BY="mailto:tardis@localhost":mailto:doctor@localhost
+UID:1234
+DTSTAMP:20180101T120000
+END:VEVENT
+END:VCALENDAR

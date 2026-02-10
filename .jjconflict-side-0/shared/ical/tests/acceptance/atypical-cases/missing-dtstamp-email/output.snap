@@ -1,0 +1,112 @@
+---
+source: core/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: Some(
+        Request,
+    ),
+    prodid: ProdId {
+        value: Text(
+            "-//ddaysoftware.com//NONSGML DDay.iCal 1.0//EN",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "lekt_1048130",
+                    ),
+                },
+            ),
+            dtstamp: None,
+            dtstart: Some(
+                DtStart {
+                    value: Date(
+                        Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                6,
+                            ),
+                            day: Day(
+                                9,
+                            ),
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: Date(
+                        Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                6,
+                            ),
+                            day: Day(
+                                10,
+                            ),
+                        },
+                    ),
+                },
+            ),
+            created: None,
+            class: Public,
+            transp: Opaque,
+            status: Some(
+                Confirmed,
+            ),
+            priority: None,
+            summary: Some(
+                Summary {
+                    value: Text(
+                        "xxx",
+                    ),
+                },
+            ),
+            location: None,
+            description: Some(
+                Description {
+                    value: Text(
+                        "",
+                    ),
+                },
+            ),
+            organizer: None,
+            attendees: [],
+            rrule: None,
+            exdate: None,
+            duration: None,
+            sequence: Some(
+                Sequence {
+                    value: 0,
+                },
+            ),
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [],
+}
+```
+
+# messages
+
+warn: unknown property `X-WR-CALNAME`
+ --> at 6:1..12
+  | when parsing `VCalendar` at 2:1
+
+error: missing property `DTSTAMP`
+  | when parsing `VEvent` at 8:1
+  | when parsing `VCalendar` at 2:1
+
+# violations
+
+- viol: event[0]: dtstamp is missing

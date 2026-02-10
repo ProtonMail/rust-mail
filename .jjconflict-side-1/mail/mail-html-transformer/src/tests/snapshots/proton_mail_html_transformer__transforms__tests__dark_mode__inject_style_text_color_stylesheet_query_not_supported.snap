@@ -1,0 +1,24 @@
+---
+source: mail/mail-html-transformer/src/tests/dark_mode.rs
+expression: html.to_string()
+---
+<html data-protonmail-message="true"><head>
+    <style>
+    .main {
+      color: #000 !important;
+    }
+    html {
+      background-color: #fff !important;
+    }
+    </style>
+  <style type="text/css">/* <dark_css> */</style><style type="text/css">[data-protonmail-message] .main {
+color: #fff !important
+ }html[data-protonmail-message] {
+background-color: #191927 !important
+ }
+
+</style></head>
+  <body>
+  
+
+</body></html>

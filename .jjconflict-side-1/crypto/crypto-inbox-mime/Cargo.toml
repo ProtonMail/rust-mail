@@ -1,0 +1,20 @@
+[package]
+name = "proton-crypto-inbox-mime"
+version = "0.4.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+mail-parser = "0.10.2"
+mail-builder = "=0.4.2"                             # https://github.com/stalwartlabs/mail-builder/issues/50
+thiserror = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+proton-crypto = { workspace = true }
+
+[lints]
+workspace = true

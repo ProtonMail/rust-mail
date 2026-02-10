@@ -1,0 +1,13 @@
+[package]
+name = "shadow_counted"
+version = "0.4.0"
+edition = "2021"
+authors = ["Christian Thäter <ct@pipapo.org>"]
+description = "An iterator that counts every iteration in a hidden counter, nested iterators may commit the count to parents"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/shadow_counted"
+repository = "https://git.pipapo.org/cehteh/shadow_counted.git"
+readme = "README.md"
+keywords = ["iterator", "count", "shadow"]
+categories = ["rust-patterns"]
+rust-version = "1.56.1"

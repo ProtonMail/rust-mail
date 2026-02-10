@@ -1,0 +1,223 @@
+---
+source: shared/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: Some(
+        Publish,
+    ),
+    prodid: ProdId {
+        value: Text(
+            "-//Google Inc//Google Calendar 70.9054//EN",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "j6sq36b9k70r3ibb6cq68or36sp6cb9@google.com",
+                    ),
+                },
+            ),
+            dtstamp: Some(
+                DtStamp {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                9,
+                            ),
+                            day: Day(
+                                3,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                14,
+                            ),
+                            minute: Minute(
+                                38,
+                            ),
+                            second: Second(
+                                42,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            dtstart: Some(
+                DtStart {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2017,
+                                ),
+                                month: Month(
+                                    10,
+                                ),
+                                day: Day(
+                                    18,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    17,
+                                ),
+                                minute: Minute(
+                                    30,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2017,
+                                ),
+                                month: Month(
+                                    10,
+                                ),
+                                day: Day(
+                                    18,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    20,
+                                ),
+                                minute: Minute(
+                                    30,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            created: Some(
+                Created {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2017,
+                            ),
+                            month: Month(
+                                5,
+                            ),
+                            day: Day(
+                                4,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                5,
+                            ),
+                            minute: Minute(
+                                53,
+                            ),
+                            second: Second(
+                                49,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            class: Public,
+            transp: Opaque,
+            status: Some(
+                Confirmed,
+            ),
+            priority: None,
+            summary: Some(
+                Summary {
+                    value: Text(
+                        "Concert",
+                    ),
+                },
+            ),
+            location: None,
+            description: None,
+            organizer: None,
+            attendees: [
+                Attendee {
+                    address: Email(
+                        EmailAddress {
+                            value: Text(
+                                "adrien@gmail.com",
+                            ),
+                        },
+                    ),
+                    cn: Some(
+                        Cn {
+                            value: ParamValue {
+                                value: "Adrien Blanc",
+                                quote: false,
+                            },
+                        },
+                    ),
+                    cutype: Some(
+                        Individual,
+                    ),
+                    email: None,
+                    role: Some(
+                        ReqParticipant,
+                    ),
+                    partstat: Some(
+                        Accepted,
+                    ),
+                    rsvp: None,
+                    x_pm_token: None,
+                },
+            ],
+            rrule: None,
+            exdate: None,
+            duration: None,
+            sequence: Some(
+                Sequence {
+                    value: 0,
+                },
+            ),
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [],
+}
+```
+
+# messages
+
+warn: unknown property `X-WR-TIMEZONE`
+ --> at 6:1..13
+  | when parsing `VCalendar` at 2:1
+
+warn: unknown parameter `X-NUM-GUESTS`
+ --> at 13:9..20
+  | when parsing `Attendee` at 12:9
+  | when parsing `VEvent` at 8:1
+  | when parsing `VCalendar` at 2:1
+
+error: unknown property `LAST-MODIFIED`
+ --> at 15:1..13
+  | when parsing `VEvent` at 8:1
+  | when parsing `VCalendar` at 2:1

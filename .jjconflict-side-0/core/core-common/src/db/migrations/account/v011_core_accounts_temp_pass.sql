@@ -1,0 +1,1 @@
+ALTER TABLE core_accounts ADD temp_pass INTEGER NOT NULL DEFAULT 0;

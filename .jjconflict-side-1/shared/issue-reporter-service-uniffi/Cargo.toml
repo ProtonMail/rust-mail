@@ -1,0 +1,12 @@
+[package]
+name = "proton-issue-reporter-service-uniffi"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+proton-issue-reporter-service = { workspace = true }
+uniffi = { workspace = true }
+[lints]
+workspace = true

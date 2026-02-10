@@ -1,0 +1,5 @@
+---
+source: core/core-common/src/tests/models/contact.rs
+expression: display_group(groups)
+---
+0 keys:

@@ -1,0 +1,12 @@
+[advisories]
+ignore = [
+"RUSTSEC-2023-0071", # Validated with crypto team
+"RUSTSEC-2024-0436", # paste is unmaintained, but still usable
+"RUSTSEC-2025-0057", # ET-4664
+"RUSTSEC-2024-0388", # ET-4663
+"RUSTSEC-2026-0005", # unsound (W)
+"RUSTSEC-2026-0002", # unsound (W)
+"RUSTSEC-2025-0134", # unmaintained (W)
+"RUSTSEC-2026-0007", # integer overflow (E)
+"RUSTSEC-2026-0009", # `time` vuln - DOS with Stack overflow => upgrade to at least 0.3.47
+]

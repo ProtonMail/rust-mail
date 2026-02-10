@@ -1,0 +1,9 @@
+#!/bin/bash
+## checks with 'test.sh'
+require git
+
+git_branch_matches "master" "main" "devel" || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" || return 0
+
+[[ -f "../test.sh" ]] || return 0
+run_test ../test.sh

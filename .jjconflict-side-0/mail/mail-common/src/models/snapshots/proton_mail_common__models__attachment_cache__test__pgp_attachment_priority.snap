@@ -1,0 +1,5 @@
+---
+source: mail/mail-common/src/models/attachment_cache.rs
+expression: test_order(vars)
+---
+name: regular, anti-utility 768000

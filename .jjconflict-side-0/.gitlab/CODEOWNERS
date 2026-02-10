@@ -1,0 +1,4 @@
+# This file specify users or shared groups that are responsible for certain files in a repository.
+# https://docs.gitlab.com/ee/user/project/codeowners/
+
+/crypto/ @crypto

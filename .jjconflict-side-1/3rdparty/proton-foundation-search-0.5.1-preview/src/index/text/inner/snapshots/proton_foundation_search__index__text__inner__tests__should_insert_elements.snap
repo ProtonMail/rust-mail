@@ -1,0 +1,382 @@
+---
+source: packages/search/src/index/text/inner/tests.rs
+expression: index
+---
+TextIndex {
+    occurrences: {
+        (
+            EntryIndex(
+                0,
+            ),
+            AttributeIndex(
+                0,
+            ),
+        ),
+        (
+            EntryIndex(
+                0,
+            ),
+            AttributeIndex(
+                1,
+            ),
+        ),
+        (
+            EntryIndex(
+                1,
+            ),
+            AttributeIndex(
+                0,
+            ),
+        ),
+        (
+            EntryIndex(
+                2,
+            ),
+            AttributeIndex(
+                0,
+            ),
+        ),
+        (
+            EntryIndex(
+                3,
+            ),
+            AttributeIndex(
+                1,
+            ),
+        ),
+    },
+    tokens: [
+        (
+            "hello",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    1,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    2,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            3,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    3,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "world",
+            {
+                OccurrenceRef(
+                    0,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    1,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    2,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "the",
+            {
+                OccurrenceRef(
+                    2,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "say",
+            {
+                OccurrenceRef(
+                    2,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            2,
+                        ),
+                    },
+                },
+                OccurrenceRef(
+                    4,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            2,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "just",
+            {
+                OccurrenceRef(
+                    4,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            0,
+                        ),
+                    },
+                },
+            },
+        ),
+        (
+            "wanted",
+            {
+                OccurrenceRef(
+                    4,
+                ): {
+                    ValueIndex(
+                        0,
+                    ): {
+                        TokenPosition(
+                            1,
+                        ),
+                    },
+                },
+            },
+        ),
+    ],
+    trigrams: {
+        "ant": {
+            TrigramPosition(
+                1,
+            ): {
+                TokenRef(
+                    5,
+                ),
+            },
+        },
+        "ell": {
+            TrigramPosition(
+                1,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "hel": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "jus": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    4,
+                ),
+            },
+        },
+        "llo": {
+            TrigramPosition(
+                2,
+            ): {
+                TokenRef(
+                    0,
+                ),
+            },
+        },
+        "nte": {
+            TrigramPosition(
+                2,
+            ): {
+                TokenRef(
+                    5,
+                ),
+            },
+        },
+        "orl": {
+            TrigramPosition(
+                1,
+            ): {
+                TokenRef(
+                    1,
+                ),
+            },
+        },
+        "rld": {
+            TrigramPosition(
+                2,
+            ): {
+                TokenRef(
+                    1,
+                ),
+            },
+        },
+        "say": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    3,
+                ),
+            },
+        },
+        "ted": {
+            TrigramPosition(
+                3,
+            ): {
+                TokenRef(
+                    5,
+                ),
+            },
+        },
+        "the": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    2,
+                ),
+            },
+        },
+        "ust": {
+            TrigramPosition(
+                1,
+            ): {
+                TokenRef(
+                    4,
+                ),
+            },
+        },
+        "wan": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    5,
+                ),
+            },
+        },
+        "wor": {
+            TrigramPosition(
+                0,
+            ): {
+                TokenRef(
+                    1,
+                ),
+            },
+        },
+    },
+    stats: Stats {
+        sizes: {
+            AttributeIndex(
+                0,
+            ): {
+                EntryIndex(
+                    0,
+                ): (
+                    10,
+                    2,
+                ),
+                EntryIndex(
+                    1,
+                ): (
+                    16,
+                    4,
+                ),
+                EntryIndex(
+                    2,
+                ): (
+                    5,
+                    1,
+                ),
+            },
+            AttributeIndex(
+                1,
+            ): {
+                EntryIndex(
+                    0,
+                ): (
+                    10,
+                    2,
+                ),
+                EntryIndex(
+                    3,
+                ): (
+                    13,
+                    3,
+                ),
+            },
+        },
+    },
+}

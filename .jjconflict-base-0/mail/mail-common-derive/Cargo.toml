@@ -1,0 +1,15 @@
+[package]
+name = "proton-mail-common-derive"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Derive macros for mail-common"
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }

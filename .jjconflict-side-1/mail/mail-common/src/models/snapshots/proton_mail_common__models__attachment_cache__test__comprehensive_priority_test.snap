@@ -1,0 +1,21 @@
+---
+source: mail/mail-common/src/models/attachment_cache.rs
+expression: test_order(comprehensive())
+---
+name: zero_sized_in_trash, utility 0
+name: ancient_tiny, anti-utility 280055530951916847104
+name: perfect_storm, anti-utility 207622914748389
+name: tiny_inline_ancient_but_starred, anti-utility 35191462735793
+name: fresh_but_huge, anti-utility 2560091
+name: recent_large, anti-utility 538947
+name: rarely_accessed_small, anti-utility 477081
+name: unstarred_medium, anti-utility 209976
+name: attachment_medium, anti-utility 198506
+name: normal_small, anti-utility 109976
+name: frequently_accessed_medium, anti-utility 56795
+name: starred_large, anti-utility 52494
+name: inline_medium, anti-utility 39701
+name: starred_trash_large, anti-utility 17019
+name: spam_tiny_new, anti-utility 6414
+name: trash_tiny_new, anti-utility 6414
+name: golden_child, anti-utility 279

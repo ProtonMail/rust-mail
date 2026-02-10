@@ -1,0 +1,8 @@
+---
+source: mail/mail-common/src/models/attachment_cache.rs
+expression: test_order(vars)
+---
+name: attachment large, anti-utility 512000
+name: attachment small, anti-utility 256000
+name: inline large, anti-utility 102400
+name: inline small, anti-utility 51200

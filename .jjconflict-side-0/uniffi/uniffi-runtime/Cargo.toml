@@ -1,0 +1,19 @@
+[package]
+name = "uniffi-runtime"
+version = "0.1.0"
+rust-version.workspace = true
+license.workspace = true
+
+[package.edition]
+workspace = true
+
+[dependencies]
+tokio.workspace = true
+# Commenting and not removing since this could be used in the future
+# tracing.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "*"
+
+[lints]
+workspace = true

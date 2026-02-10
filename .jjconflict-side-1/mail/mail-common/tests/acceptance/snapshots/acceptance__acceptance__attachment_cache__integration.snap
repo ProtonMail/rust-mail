@@ -1,0 +1,37 @@
+---
+source: mail/mail-common/tests/acceptance/attachment_cache.rs
+expression: output
+---
+This test shows the before and after of a cleanup with a max size of 262144 bytes
+
+---------- All attachments ----------
+zero_sized_in_trash
+spam_tiny_new
+trash_tiny_new
+ancient_tiny
+recent_large
+frequently_accessed_medium
+rarely_accessed_small
+starred_large
+unstarred_medium
+pgp_large
+normal_small
+inline_medium
+attachment_medium
+starred_trash_large
+pgp_old_but_frequent
+tiny_inline_ancient_but_starred
+unsent_draft_large
+fresh_but_huge
+perfect_storm
+golden_child
+name_foo.png
+
+
+---------- Cleaned attachments ----------
+spam_tiny_new
+trash_tiny_new
+inline_medium
+starred_trash_large
+golden_child
+name_foo.png

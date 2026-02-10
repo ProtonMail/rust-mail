@@ -1,0 +1,14 @@
+[0.4.0] ~ 10/07/2016
+- Added:    Sift3 distance + tests
+
+[0.3.0] ~ 30/06/2016
+- Added:    Damerau Levenshtein distance + tests
+
+[0.2.0] ~ 28/06/2016
+- Added:    Hamming distance + tests
+- Added:    DistanceError enum
+- Changed:  distance::levenshtein() now returns an usize instead of an i32
+
+[0.1.0] ~ 28/06/2016
+- Added:    Levenshtein distance algorithm
+- Added:    Tests for the Levenshtein algorithm

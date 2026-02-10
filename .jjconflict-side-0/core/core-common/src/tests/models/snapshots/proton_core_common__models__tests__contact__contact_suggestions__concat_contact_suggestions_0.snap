@@ -1,0 +1,11 @@
+---
+source: core/core-common/src/tests/models/contact.rs
+expression: display_suggestions(one.all().to_vec())
+---
+2 suggestions:
+
+contact/234: Michael Scott
+M (#213474): Michael Scott <mXXXXXX@XXXXX>,  local_contact_id: 234, Proton address, last used: 2
+
+contact/123: Barbara Lox
+B (#A839A4): Barbara Lox <bXXXXXX@XXXXX>,  local_contact_id: 123, Proton address, last used: 1

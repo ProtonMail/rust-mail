@@ -1,0 +1,37 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: draft.body()
+snapshot_kind: text
+---
+<html><head></head><body><br><br><br><div class="protonmail_signature_block-user"></div><div class="protonmail_quote"><br><br>-------- Original Message --------<br>On Thursday, 01/01/70 at 00:00 Send InToVoid &lt;sender@void.org&gt; wrote:<br><blockquote class="protonmail_quote">
+<section>
+    
+        
+        
+        
+    
+    <div>
+        <img border="0">
+        <map name="fp">
+            <area coords="0,0,800,800" shape="rect" target="_blank">
+        </map>
+    </div>
+
+    <img width="" height="" alt="">
+    <img width="" height="" alt="">
+    <img width="" height="" alt="">
+    <a rel="noreferrer">Alll</a>
+    <a rel="noreferrer">Alll</a>
+    <div>Alll</div>
+    <div>Alll</div>
+    <p style="font-size: 10pt; font-family: &quot;\\2018Calibri\\2019&quot;; color: #000">
+        Example style that caused regexps to crash
+    </p>
+    <img id="babase64" src="data:image/jpg;base64,iVBORw0KGgoAAAANSUhEUgAABoIAAAVSCAYAAAAisOk2AAAMS2lDQ1BJQ0MgUHJv
+ZmlsZQAASImVVwdYU8kWnltSSWiBUKSE3kQp0qWE0CIISBVshCSQUGJMCCJ2FlkF
+1y4ioK7oqoiLrgWQtaKudVHs/aGIysq6WLCh8iYF1tXvvfe9831z758z5/ynZO69
+MwDo1PKk0jxUF4B8SYEsITKUNTEtnUXqAgSgD1AwGozk8eVSdnx8DIAydP+nvLkO">
+</section>
+
+
+</blockquote></div></body></html>

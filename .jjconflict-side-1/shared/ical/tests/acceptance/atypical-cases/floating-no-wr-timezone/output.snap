@@ -1,0 +1,318 @@
+---
+source: shared/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: Some(
+        Publish,
+    ),
+    prodid: ProdId {
+        value: Text(
+            "-//xxxx//NONSGML agenda//FR",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "hwkhwkhteke",
+                    ),
+                },
+            ),
+            dtstamp: Some(
+                DtStamp {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                9,
+                            ),
+                            day: Day(
+                                20,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                8,
+                            ),
+                            minute: Minute(
+                                0,
+                            ),
+                            second: Second(
+                                0,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            dtstart: Some(
+                DtStart {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2021,
+                                ),
+                                month: Month(
+                                    9,
+                                ),
+                                day: Day(
+                                    20,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    8,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Local,
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2021,
+                                ),
+                                month: Month(
+                                    9,
+                                ),
+                                day: Day(
+                                    20,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    12,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Local,
+                        },
+                    ),
+                },
+            ),
+            created: None,
+            class: Public,
+            transp: Opaque,
+            status: None,
+            priority: None,
+            summary: Some(
+                Summary {
+                    value: Text(
+                        "TD AN0501",
+                    ),
+                },
+            ),
+            location: None,
+            description: Some(
+                Description {
+                    value: Text(
+                        "xxxx",
+                    ),
+                },
+            ),
+            organizer: None,
+            attendees: [],
+            rrule: None,
+            exdate: None,
+            duration: None,
+            sequence: None,
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [
+        VTimeZone {
+            tzid: TzId {
+                value: "Europe/Paris",
+            },
+            daylights: [
+                TzProps {
+                    dtstart: DtStart {
+                        value: DateTime(
+                            DateTime {
+                                date: Date {
+                                    year: Year(
+                                        1970,
+                                    ),
+                                    month: Month(
+                                        3,
+                                    ),
+                                    day: Day(
+                                        29,
+                                    ),
+                                },
+                                time: Time {
+                                    hour: Hour(
+                                        2,
+                                    ),
+                                    minute: Minute(
+                                        0,
+                                    ),
+                                    second: Second(
+                                        0,
+                                    ),
+                                },
+                                form: Local,
+                            },
+                        ),
+                    },
+                    tz_offset_from: TzOffsetFrom {
+                        value: UtcOffset {
+                            offset: 3600,
+                        },
+                    },
+                    tz_offset_to: TzOffsetTo {
+                        value: UtcOffset {
+                            offset: 7200,
+                        },
+                    },
+                    rrule: Some(
+                        RRule {
+                            value: Recur {
+                                freq: Yearly,
+                                until: None,
+                                count: None,
+                                interval: None,
+                                by_second: [],
+                                by_minute: [],
+                                by_hour: [],
+                                by_day: [
+                                    Fixed(
+                                        -1,
+                                        Sunday,
+                                    ),
+                                ],
+                                by_month_day: [],
+                                by_year_day: [],
+                                by_week_no: [],
+                                by_month: [
+                                    Month(
+                                        3,
+                                    ),
+                                ],
+                                by_set_pos: [],
+                                wkst: None,
+                            },
+                        },
+                    ),
+                    tz_name: Some(
+                        TzName {
+                            value: Text(
+                                "CEST",
+                            ),
+                        },
+                    ),
+                },
+            ],
+            standards: [
+                TzProps {
+                    dtstart: DtStart {
+                        value: DateTime(
+                            DateTime {
+                                date: Date {
+                                    year: Year(
+                                        1970,
+                                    ),
+                                    month: Month(
+                                        10,
+                                    ),
+                                    day: Day(
+                                        25,
+                                    ),
+                                },
+                                time: Time {
+                                    hour: Hour(
+                                        3,
+                                    ),
+                                    minute: Minute(
+                                        0,
+                                    ),
+                                    second: Second(
+                                        0,
+                                    ),
+                                },
+                                form: Local,
+                            },
+                        ),
+                    },
+                    tz_offset_from: TzOffsetFrom {
+                        value: UtcOffset {
+                            offset: 7200,
+                        },
+                    },
+                    tz_offset_to: TzOffsetTo {
+                        value: UtcOffset {
+                            offset: 3600,
+                        },
+                    },
+                    rrule: Some(
+                        RRule {
+                            value: Recur {
+                                freq: Yearly,
+                                until: None,
+                                count: None,
+                                interval: None,
+                                by_second: [],
+                                by_minute: [],
+                                by_hour: [],
+                                by_day: [
+                                    Fixed(
+                                        -1,
+                                        Sunday,
+                                    ),
+                                ],
+                                by_month_day: [],
+                                by_year_day: [],
+                                by_week_no: [],
+                                by_month: [
+                                    Month(
+                                        10,
+                                    ),
+                                ],
+                                by_set_pos: [],
+                                wkst: None,
+                            },
+                        },
+                    ),
+                    tz_name: Some(
+                        TzName {
+                            value: Text(
+                                "CET",
+                            ),
+                        },
+                    ),
+                },
+            ],
+        },
+    ],
+}
+```
+
+# messages
+
+warn: unknown property `X-WR-CALNAME`
+ --> at 5:1..12
+  | when parsing `VCalendar` at 2:1

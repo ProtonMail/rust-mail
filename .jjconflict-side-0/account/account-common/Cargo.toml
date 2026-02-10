@@ -1,0 +1,21 @@
+[package]
+name = "proton-account-common"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# proton deps
+proton-account-api.workspace = true
+muon = { workspace = true }
+
+# crates.io dependencies
+secrecy.workspace = true
+fancy-regex = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

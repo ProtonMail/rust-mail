@@ -1,0 +1,66 @@
+[package]
+name = "proton-mail-uniffi"
+version = "0.161.26"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+license.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+derive_more = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+itertools = { workspace = true }
+muon = { workspace = true }
+parking_lot = { workspace = true }
+proton-account-api = { workspace = true }
+proton-account-uniffi = { workspace = true }
+proton-action-queue = { workspace = true }
+proton-calendar-api = { workspace = true }
+proton-calendar-common = { workspace = true }
+proton-core-api = { workspace = true }
+proton-core-common = { workspace = true }
+proton-crypto-account = { workspace = true }
+proton-crypto-inbox = { workspace = true }
+proton-event-loop = { workspace = true }
+proton-mail-api = { workspace = true }
+proton-mail-common = { workspace = true, features = ["proton_mail_error_log"] }
+proton-observability = { workspace = true }
+proton-task-service = { workspace = true }
+proton-issue-reporter-service-uniffi = { workspace = true }
+proton-ical = { workspace = true }
+proton-vcard = { workspace = true }
+proton-mailto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+smart-default = { workspace = true }
+stash = { workspace = true }
+proton-log-service = { workspace = true }
+secrecy = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uniffi = { workspace = true }
+uniffi-common = { workspace = true }
+uniffi-macros = { workspace = true }
+uniffi-runtime = { workspace = true }
+sqlite-watcher = { workspace = true }
+non-empty-string = { workspace = true }
+proton-network-monitor-service = { workspace = true }
+url = { workspace = true }
+zeroizing-alloc = { workspace = true }
+
+[dev-dependencies]
+proton-mail-api = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

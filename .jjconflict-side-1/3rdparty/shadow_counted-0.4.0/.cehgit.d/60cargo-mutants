@@ -1,0 +1,14 @@
+#!/bin/bash
+# shellcheck disable=SC2046
+## runs 'cargo mutants', backgrounds
+require git cargo
+
+git_branch_matches "master" "main" "release.*" || return 0
+is_cargo_project || return 0
+cargo_tool_installed mutants || return 0
+
+git_hook_matches "pre-commit" "pre-merge-commit" "commit-msg" || return 0
+git_hook_matches "pre-commit" "pre-merge-commit" && background_schedule && return 0
+git_hook_matches "commit-msg" && background_wait && return $(background_result)
+
+run_test cargo mutants -j 4 --all-features --colors never

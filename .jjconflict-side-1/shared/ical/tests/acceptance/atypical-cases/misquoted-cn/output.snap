@@ -1,0 +1,172 @@
+---
+source: shared/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: None,
+    prodid: ProdId {
+        value: Text(
+            "-//Proton AG//ProtonCalendar 1.0.0//EN",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "1",
+                    ),
+                },
+            ),
+            dtstamp: Some(
+                DtStamp {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2018,
+                            ),
+                            month: Month(
+                                1,
+                            ),
+                            day: Day(
+                                1,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                12,
+                            ),
+                            minute: Minute(
+                                0,
+                            ),
+                            second: Second(
+                                0,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            dtstart: Some(
+                DtStart {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2018,
+                                ),
+                                month: Month(
+                                    1,
+                                ),
+                                day: Day(
+                                    1,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    12,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2018,
+                                ),
+                                month: Month(
+                                    1,
+                                ),
+                                day: Day(
+                                    1,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    12,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            created: None,
+            class: Public,
+            transp: Opaque,
+            status: None,
+            priority: None,
+            summary: None,
+            location: None,
+            description: None,
+            organizer: Some(
+                Organizer {
+                    address: Email(
+                        EmailAddress {
+                            value: Text(
+                                "jon.snow@localhost",
+                            ),
+                        },
+                    ),
+                    cn: Some(
+                        Cn {
+                            value: ParamValue {
+                                value: "+ Jon Snow, Ostéopathe",
+                                quote: true,
+                            },
+                        },
+                    ),
+                    email: None,
+                    sent_by: None,
+                },
+            ),
+            attendees: [],
+            rrule: None,
+            exdate: None,
+            duration: None,
+            sequence: None,
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [],
+}
+```
+
+# messages
+
+warn: quirky quote
+ --> at 8:14
+  | when parsing `ParamValue` at 8:14
+  | when parsing `Cn` at 8:14
+  | when parsing `Organizer` at 8:10
+  | when parsing `VEvent` at 5:1
+  | when parsing `VCalendar` at 2:1
+
+warn: quirky comma
+ --> at 8:27
+  | when parsing `ParamValue` at 8:14
+  | when parsing `Cn` at 8:14
+  | when parsing `Organizer` at 8:10
+  | when parsing `VEvent` at 5:1
+  | when parsing `VCalendar` at 2:1

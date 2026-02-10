@@ -1,0 +1,44 @@
+BEGIN:VCALENDAR
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VTIMEZONE
+TZID:nuku'alofa
+BEGIN:STANDARD
+TZOFFSETFROM:+1300
+TZOFFSETTO:+1300
+TZNAME:+13
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTART;TZID=nuku'alofa:20220111T223000
+DTEND;TZID=nuku'alofa:20220111T233000
+RRULE:FREQ=MONTHLY;UNTIL=20230101T105959Z;BYDAY=2TU
+DTSTAMP:20220111T162244Z
+ORGANIZER;CN=Email Notifications:mailto:pn5gf1n83ukmudv1r30avpp4qo@group.ca
+ lendar.google.com
+UID:4hkvne86or8s6u9ap1puq615db2@google.com
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=
+ TRUE;CN=calendaruser@pm.me;X-NUM-GUESTS=0:mailto:calendaruser@pm.me
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=
+ TRUE;CN=calendar-user-pentest1@protonmail.com;X-NUM-GUESTS=0:mailto:calenda
+ r-user-pentest1@protonmail.com
+X-MICROSOFT-CDO-OWNERAPPTID:-1255746708
+CREATED:20220111T162243Z
+DESCRIPTION:-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~
+ :~:~:~:~:~:~:~:~::~:~::-\nDo not edit this section of the description.\n\nV
+ iew your event at https://calendar.google.com/calendar/event?action=VIEW&ei
+ d=NGhrdm5lODZvcjhzNnU5YXAxcHVxNjE1ZGIgY2FsZW5kYXItdXNlci1wZW50ZXN0MUBwcm90b
+ 25tYWlsLmNvbQ&tok=NTIjcG41Z2YxbjgzdWttdWR2MXIzMGF2cHA0cW9AZ3JvdXAuY2FsZW5kY
+ XIuZ29vZ2xlLmNvbWVkODkwY2YzMTYyN2E2NzM1MmI2ZDAxYWZiMGUzMTVhMmYzZTdmMWI&ctz=
+ Europe%2FVilnius&hl=en_GB&es=1.\n-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:
+ ~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-
+LAST-MODIFIED:20220111T162243Z
+SEQUENCE:0
+STATUS:CONFIRMED
+SUMMARY:Tongatapu nuku'alofa
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR

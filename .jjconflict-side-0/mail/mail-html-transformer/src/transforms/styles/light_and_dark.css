@@ -1,0 +1,11 @@
+body {
+    color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-norm: #D1D1D4;
+    --background-norm: #191927;
+    --primary: #7777F8;
+  }
+}

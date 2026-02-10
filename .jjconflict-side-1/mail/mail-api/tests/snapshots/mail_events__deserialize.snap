@@ -1,0 +1,295 @@
+---
+source: mail/mail-api/tests/mail_events.rs
+expression: mail_event
+---
+MailEvent {
+    event_id: EventId(
+        "ACXDmTaBub14w==",
+    ),
+    labels: Some(
+        [
+            LabelEvent {
+                id: LabelId(
+                    "sadfaACXDmTaBub14w==",
+                ),
+                action: Create,
+                label: Some(
+                    Label {
+                        id: LabelId(
+                            "sadfaACXDmTaBub14w==",
+                        ),
+                        parent_id: Some(
+                            LabelId(
+                                "sadfaACXDmTaBub14w==",
+                            ),
+                        ),
+                        color: "#f66",
+                        display: true,
+                        expanded: true,
+                        label_type: Label,
+                        name: "Event Label!",
+                        notify: true,
+                        order: 8,
+                        path: Some(
+                            "Folder/Event Label!",
+                        ),
+                        sticky: true,
+                    },
+                ),
+            },
+        ],
+    ),
+    conversation_counts: Some(
+        [
+            ConversationCount {
+                label_id: LabelId(
+                    "0",
+                ),
+                total: 4,
+                unread: 3,
+            },
+        ],
+    ),
+    conversations: Some(
+        [
+            ConversationEvent {
+                id: ConversationId(
+                    "I6hgx3Ol-d3HYa3E394T...ACXDmTaBub14w==",
+                ),
+                action: Create,
+                conversation: Some(
+                    Conversation {
+                        id: ConversationId(
+                            "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+                        ),
+                        attachment_info: {
+                            "image/jpeg": MessageAttachmentInfo {
+                                attachment: 0,
+                                inline: 0,
+                            },
+                            "text/calendar": MessageAttachmentInfo {
+                                attachment: 0,
+                                inline: 0,
+                            },
+                        },
+                        attachments_metadata: [
+                            AttachmentMetadata {
+                                id: AttachmentId(
+                                    "string",
+                                ),
+                                disposition: Attachment,
+                                mime_type: "string",
+                                name: "string",
+                                size: 0,
+                            },
+                        ],
+                        display_snoozed_reminder: true,
+                        expiration_time: 0,
+                        labels: [
+                            ConversationLabel {
+                                id: LabelId(
+                                    "0",
+                                ),
+                                context_expiration_time: 0,
+                                context_num_attachments: 0,
+                                context_num_messages: 5,
+                                context_num_unread: 0,
+                                context_size: 541,
+                                context_snooze_time: 1578070879,
+                                context_time: 1578070879,
+                            },
+                        ],
+                        num_attachments: 0,
+                        num_messages: 5,
+                        num_unread: 0,
+                        order: 675,
+                        recipients: [],
+                        senders: [],
+                        size: 3555,
+                        subject: "Testing",
+                        context_time: None,
+                    },
+                ),
+            },
+        ],
+    ),
+    incoming_defaults: Some(
+        [
+            IncomingDefaultEvent {
+                id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
+                action: Create,
+            },
+            IncomingDefaultEvent {
+                id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
+                action: Create,
+            },
+        ],
+    ),
+    mail_settings: Some(
+        MailSettings {
+            almost_all_mail: AllMail,
+            attach_public_key: false,
+            auto_delete_spam_and_trash_days: None,
+            auto_save_contacts: true,
+            block_sender_confirmation: None,
+            composer_mode: Normal,
+            confirm_link: true,
+            delay_send_seconds: 10,
+            display_name: "Put Chinese Here",
+            draft_mime_type: TextHtml,
+            enable_folder_color: false,
+            font_face: None,
+            hide_remote_images: true,
+            hide_embedded_images: true,
+            hide_sender_images: true,
+            image_proxy: 0,
+            inherit_parent_folder_color: true,
+            message_buttons: ReadFirst,
+            mobile_settings: Some(
+                MobileSettings {
+                    conversation_toolbar: MobileSetting {
+                        actions: [
+                            Other(
+                                "string",
+                            ),
+                        ],
+                        is_custom: true,
+                    },
+                    list_toolbar: MobileSetting {
+                        actions: [
+                            Other(
+                                "string",
+                            ),
+                        ],
+                        is_custom: true,
+                    },
+                    message_toolbar: MobileSetting {
+                        actions: [
+                            Other(
+                                "string",
+                            ),
+                        ],
+                        is_custom: true,
+                    },
+                },
+            ),
+            next_message_on_move: Some(
+                DisabledExplicit,
+            ),
+            num_message_per_page: 50,
+            pgp_scheme: Mime,
+            pm_signature: PmSignature(
+                0,
+            ),
+            pm_signature_referral_link: false,
+            prompt_pin: false,
+            receive_mime_type: TextHtml,
+            right_to_left: LeftToRight,
+            shortcuts: true,
+            show_images: AutoLoadEmbedded,
+            show_mime_type: TextHtml,
+            show_moved: DoNotKeep,
+            sign: false,
+            signature: "This is my signature",
+            spam_action: None,
+            sticky_labels: false,
+            submission_access: false,
+            swipe_left: Archive,
+            swipe_right: Trash,
+            theme: "<CSS>",
+            view_layout: Column,
+            view_mode: Conversations,
+        },
+    ),
+    message_counts: Some(
+        [
+            MessageCount {
+                label_id: LabelId(
+                    "0",
+                ),
+                total: 15,
+                unread: 6,
+            },
+        ],
+    ),
+    messages: Some(
+        [
+            MessageEvent {
+                id: MessageId(
+                    "KPlISx5MiML3XcSYPrREF-...-adgMIhFhPaAukDm9fw3MAOfsds-tfNw==",
+                ),
+                action: Create,
+                message: Some(
+                    MessageMetadata {
+                        id: MessageId(
+                            "KPlISx5MiML3XcSYPrREF-Jw9AFa2kk60Lqw7FVWAGvJUsT_zzWKFI-adgMIhFhPaAukDm9fw3MAOfsds-tfNw==",
+                        ),
+                        conversation_id: ConversationId(
+                            "Wk30GtU7aIj8Gu6yWkSc3SacA==",
+                        ),
+                        address_id: AddressId(
+                            "cO6RgDJwoHFScLqIkVnRD9luDVkh20EDto1aIHVHU43-dJlREzFcUjS-c7bB-_qlnxBgwAShddHZ4UDdu6RswQ==",
+                        ),
+                        attachments_metadata: [
+                            AttachmentMetadata {
+                                id: AttachmentId(
+                                    "string",
+                                ),
+                                disposition: Attachment,
+                                mime_type: "string",
+                                name: "string",
+                                size: 0,
+                            },
+                        ],
+                        bcc_list: [],
+                        cc_list: [],
+                        expiration_time: 0,
+                        external_id: Some(
+                            ExternalId(
+                                "somesemirandomstringofchars",
+                            ),
+                        ),
+                        flags: MessageFlags(
+                            8198,
+                        ),
+                        is_forwarded: false,
+                        is_replied: false,
+                        is_replied_all: false,
+                        label_ids: [
+                            LabelId(
+                                "1",
+                            ),
+                        ],
+                        num_attachments: 2,
+                        order: 456,
+                        sender: MessageSender {
+                            address: fXX@XXXXXXXXXXXXXX,
+                            bimi_selector: None,
+                            display_sender_image: true,
+                            is_proton: true,
+                            is_simple_login: true,
+                            name: xxx,
+                        },
+                        size: 148,
+                        snooze_time: 1433890289,
+                        subject: "new subject",
+                        time: 1433890289,
+                        to_list: [
+                            MessageRecipient {
+                                address: fXX@XXXXXXXXXXXXXX,
+                                is_proton: true,
+                                name: xxx,
+                                group: Some(
+                                    "string",
+                                ),
+                            },
+                        ],
+                        unread: true,
+                    },
+                ),
+            },
+        ],
+    ),
+    refresh: 0,
+    has_more: false,
+}

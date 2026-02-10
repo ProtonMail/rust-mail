@@ -1,0 +1,12 @@
+---
+source: mail/mail-html-transformer/src/replace_inner.rs
+expression: main.to_string()
+snapshot_kind: text
+---
+<html><head></head><body>
+<div class="not_foo_bar">
+    <a href="hello.com"> hello</a>
+</div>
+
+
+</body></html>

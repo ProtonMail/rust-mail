@@ -1,0 +1,40 @@
+---
+source: mail/mail-html-transformer/src/tests/utm.rs
+expression: results
+---
+{
+    StrippedUTM {
+        original: Url {
+            scheme: "https",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: Some(
+                Domain(
+                    "example.com",
+                ),
+            ),
+            port: None,
+            path: "/",
+            query: Some(
+                "utm_source=example&utm_medium=example&utm_campaign=example",
+            ),
+            fragment: None,
+        },
+        cleaned: Url {
+            scheme: "https",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: Some(
+                Domain(
+                    "example.com",
+                ),
+            ),
+            port: None,
+            path: "/",
+            query: None,
+            fragment: None,
+        },
+    },
+}

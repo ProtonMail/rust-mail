@@ -1,0 +1,18 @@
+---
+source: packages/search/src/query/expression/pest_test.rs
+expression: tree
+---
+query: 'title~hello'
+  expression: 'title~hello'
+    or_seq: 'title~hello'
+      and_seq: 'title~hello'
+        primary_expr: 'title~hello'
+          term_expr: 'title~hello'
+            field_term: 'title~hello'
+              FIELD: 'title'
+              OPERATOR: '~'
+              value: 'hello'
+                STRING: 'hello'
+                  UNQUOTED_STRING: 'hello'
+                    USTRING: 'hello'
+  EOI: ''

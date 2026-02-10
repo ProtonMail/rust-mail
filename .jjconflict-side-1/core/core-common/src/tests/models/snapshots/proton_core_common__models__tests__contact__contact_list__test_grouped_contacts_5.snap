@@ -1,0 +1,17 @@
+---
+source: core/core-common/src/tests/models/contact.rs
+expression: display_group(groups)
+---
+4 keys:
+
+D (1 item)
+Contact D (#A1439F): Dad (0 addresses)
+
+F (1 item)
+Group F (#A1439F): Family (0 addresses)
+
+M (1 item)
+Contact M (#495EA9): Mom (0 addresses)
+
+S (1 item)
+Contact S (#9C89FF): Sister (0 addresses)

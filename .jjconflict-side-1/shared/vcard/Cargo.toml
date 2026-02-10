@@ -1,0 +1,20 @@
+[package]
+name = "proton-vcard"
+version = "0.2.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+itertools = { workspace = true }
+chrono = { workspace = true }
+ical = { workspace = true }
+paste = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[lints]
+workspace = true

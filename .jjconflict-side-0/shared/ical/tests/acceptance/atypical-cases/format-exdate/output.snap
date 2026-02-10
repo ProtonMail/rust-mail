@@ -1,0 +1,154 @@
+---
+source: core/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: Some(
+        Publish,
+    ),
+    prodid: ProdId {
+        value: Text(
+            "-//ddaysoftware.com//NONSGML DDay.iCal 1.0//EN",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "event-assignment-652662",
+                    ),
+                },
+            ),
+            dtstamp: Some(
+                DtStamp {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                9,
+                            ),
+                            day: Day(
+                                2,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                4,
+                            ),
+                            minute: Minute(
+                                15,
+                            ),
+                            second: Second(
+                                0,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            dtstart: Some(
+                DtStart {
+                    value: Date(
+                        Date {
+                            year: Year(
+                                2015,
+                            ),
+                            month: Month(
+                                9,
+                            ),
+                            day: Day(
+                                14,
+                            ),
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: Date(
+                        Date {
+                            year: Year(
+                                2015,
+                            ),
+                            month: Month(
+                                9,
+                            ),
+                            day: Day(
+                                15,
+                            ),
+                        },
+                    ),
+                },
+            ),
+            created: None,
+            class: Public,
+            transp: Opaque,
+            status: None,
+            priority: None,
+            summary: Some(
+                Summary {
+                    value: Text(
+                        " test summary",
+                    ),
+                },
+            ),
+            location: None,
+            description: None,
+            organizer: None,
+            attendees: [],
+            rrule: None,
+            exdate: Some(
+                DateTimes(
+                    Utc,
+                    [
+                        (
+                            Date {
+                                year: Year(
+                                    2015,
+                                ),
+                                month: Month(
+                                    8,
+                                ),
+                                day: Day(
+                                    3,
+                                ),
+                            },
+                            Time {
+                                hour: Hour(
+                                    8,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                        ),
+                    ],
+                ),
+            ),
+            duration: None,
+            sequence: Some(
+                Sequence {
+                    value: 0,
+                },
+            ),
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [],
+}
+```
+
+# messages
+
+warn: unknown property `X-WR-CALNAME`
+ --> at 6:1..12
+  | when parsing `VCalendar` at 2:1
