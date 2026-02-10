@@ -15,7 +15,7 @@ use crate::app_events::{OnEnterForegroundEvent, OnExitForegroundEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
-    ApiConfig, LocalContactId, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
+    ApiConfig, AuthScopes, LocalContactId, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::{migrate_account_db, verify_account_db};
@@ -255,7 +255,7 @@ pub enum CoreSessionState {
 impl CoreSessionState {
     #[must_use]
     pub fn of(session: &CoreSession) -> Self {
-        if session.auth_scopes.contains("twofactor") {
+        if !session.auth_scopes.contains(&AuthScopes::full_scope()) {
             CoreSessionState::NeedTfa
         } else if session.key_secret.is_none() {
             CoreSessionState::NeedKey
