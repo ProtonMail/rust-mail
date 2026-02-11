@@ -2,7 +2,7 @@ pub use self::keys::*;
 use self::services::{EventLoopService, InitializationService};
 
 use crate::actions::event_poll::EventPoll as EventPollAction;
-use crate::context::services::{SessionObserverService, UserMetricService};
+use crate::context::services::{MeasurementService, SessionObserverService, UserMetricService};
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
@@ -16,10 +16,10 @@ use proton_core_api::session::Session;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use services::{PaymentsService, UserFeatureFlagsService};
-use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use stash::watcher::TableWatcher;
+use stash::{AccountDb, UserDb};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -149,7 +149,8 @@ impl UserContext {
                         .with_service(InitializationService::new(
                             InitializationWatcher::new(&user_stash).await?,
                         ))
-                        .with_cyclic_service(UserMetricService::new);
+                        .with_cyclic_service(UserMetricService::new)
+                        .with_cyclic_service(MeasurementService::new);
                 }
 
                 builder.build(
@@ -248,6 +249,11 @@ impl UserContext {
     #[must_use]
     pub fn stash(&self) -> &Stash<UserDb> {
         &self.user_stash
+    }
+
+    #[must_use]
+    pub fn account_stash(&self) -> &Stash<AccountDb> {
+        self.context.account_stash()
     }
 
     #[must_use]
@@ -462,6 +468,11 @@ impl UserContext {
     #[must_use]
     pub fn feature_flags(&self) -> &UserFeatureFlagsService {
         self.get_service::<UserFeatureFlagsService>()
+    }
+
+    #[must_use]
+    pub fn global_feature_flags(&self) -> &crate::services::FeatureFlagsService {
+        self.context.feature_flags()
     }
 }
 
