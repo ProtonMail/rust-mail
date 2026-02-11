@@ -2022,7 +2022,7 @@ dependencies = [
 [[package]]
 name = "email_address"
 version = "0.2.9"
-source = "git+https://github.com/ProtonMail/rust-email_address.git?branch=feat%2Fallow-long-local-parts#472383f643da5166ebf41a9f9c2f8a436edc16e2"
+source = "git+https://github.com/ProtonMail/rust-email_address.git?branch=fix%2Fparse-display-format-without-whitespace#3e12c39e6fca941236496986dfd2c2a3135ab293"
 dependencies = [
  "serde",
 ]

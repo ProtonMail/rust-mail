@@ -157,7 +157,7 @@ zeroizing-alloc = "0.1.0"
 version = "0.2.9"
 features = ["serde"]
 git = "https://github.com/ProtonMail/rust-email_address.git"
-branch = "feat/allow-long-local-parts"
+branch = "fix/parse-display-format-without-whitespace"
 
 [workspace.dependencies.proton-api-utils]
 version = "0.1.0"
