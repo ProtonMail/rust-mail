@@ -3,6 +3,9 @@
 //! This module handles search indexing for message events, following the subscriber pattern.
 //! It provides functions that can be called from event handlers to queue search indexing
 //! operations within the same transaction for atomicity.
+//!
+//! TODO(ET-5871): If bodies are synced but not stored, indexed data may become orphaned
+//! because the local message ID used by intents is no longer referenceable.
 
 use crate::AppError;
 use crate::models::Message;
