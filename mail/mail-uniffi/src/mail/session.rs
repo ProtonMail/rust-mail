@@ -1,5 +1,6 @@
 use crate::core::datatypes::{ApiConfig, AppDetails, AppProtection, AppSettings, AppSettingsDiff};
 use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
+use crate::core::measurement::{MeasurementEventType, MeasurementValue};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
@@ -14,7 +15,7 @@ use crate::mail::state::MailUserContextMap;
 use crate::version::rust_sdk_version;
 use crate::{AsyncLiveQueryCallback, declare_live_query_tagger};
 use crate::{LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async};
-use proton_core_common::services::SessionObserverService;
+use proton_core_common::services::{MeasurementService, SessionObserverService};
 
 use chrono::Local;
 use futures::TryFutureExt;
@@ -37,6 +38,7 @@ use proton_network_monitor_service::OsNetworkStatus as RealOsNetworkStatus;
 use stash::AccountDb;
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -1068,6 +1070,35 @@ impl MailSession {
         async_runtime().block_on(async {
             self.ctx().core_context().on_exit_foreground().await;
         });
+    }
+
+    pub async fn record_measurement_prelogin(
+        &self,
+        event_type: MeasurementEventType,
+        asid: String,
+        app_package_name: String,
+        fields: HashMap<String, MeasurementValue>,
+    ) -> Result<(), ProtonError> {
+        let ctx = self.mail_ctx.clone();
+        uniffi_async(async move {
+            let fields = fields.into_iter().map(|(k, v)| (k, v.into())).collect();
+
+            // Since we do not have an access to user context yet but we do not want to keep this logic in
+            // uniffi layer, we use associated function here.
+            MeasurementService::record_prelogin(
+                ctx.core_context().account_stash(),
+                event_type.into(),
+                asid,
+                app_package_name,
+                fields,
+            )
+            .await
+            .map_err(|e| RealProtonMailError::from(MailContextError::from(e)))?;
+
+            Ok::<_, RealProtonMailError>(())
+        })
+        .await
+        .map_err(ProtonError::from)
     }
 
     /// Export all logs into a single file wih the given `file_path`

@@ -7,6 +7,7 @@ use crate::core::datatypes::{
     NewSubscriptionValues, PaymentMethod, PaymentReceipt, PaymentToken, PaymentsPlans,
     PaymentsStatus, Subscriptions, UpsellEligibility, User, UserSettings,
 };
+use crate::core::measurement::{MeasurementEventType, MeasurementValue};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
@@ -23,13 +24,14 @@ use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::ProtonAuth;
 use proton_core_common::UserContext;
 use proton_core_common::actions::user_feature_flags::OverrideFlag;
-use proton_core_common::services::PaymentsService;
+use proton_core_common::services::{MeasurementService, PaymentsService};
 use proton_mail_common::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use proton_mail_common::{MailContextError, MailUserContext};
 use proton_observability::PreLoginMetricRecorder;
 use stash::UserDb;
 use stash::stash::{Stash, WatcherHandle};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
@@ -328,6 +330,33 @@ impl MailUserSession {
             let settings = ctx.user_settings().ok_into().await?;
 
             Result::<_, RealProtonMailError>::Ok(settings)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    pub async fn record_measurement(
+        &self,
+        event_type: MeasurementEventType,
+        asid: String,
+        app_package_name: String,
+        fields: HashMap<String, MeasurementValue>,
+    ) -> Result<(), UserSessionError> {
+        let ctx = self.ctx()?;
+        let new_session = matches!(event_type, MeasurementEventType::Open { new_session: true });
+
+        uniffi_async(async move {
+            let service = ctx.user_context().get_service::<MeasurementService>();
+
+            if new_session {
+                service.clear_session_start();
+            }
+
+            let fields = fields.into_iter().map(|(k, v)| (k, v.into())).collect();
+            service
+                .record(event_type.into(), asid, app_package_name, fields)
+                .await
+                .map_err(|e| RealProtonMailError::from(MailContextError::from(e)))
         })
         .await
         .map_err(UserSessionError::from)
