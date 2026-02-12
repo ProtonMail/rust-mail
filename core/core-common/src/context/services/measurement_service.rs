@@ -276,7 +276,6 @@ impl MeasurementService {
         if previous_telemetry_state == Some(true) && !telemetry_enabled {
             debug!("Telemetry changed from enabled to disabled, sending OptOut event");
             Self::handle_optout(ctx, service).await?;
-            return Ok(());
         }
 
         if !telemetry_enabled {
