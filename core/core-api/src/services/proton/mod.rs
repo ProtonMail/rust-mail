@@ -74,7 +74,7 @@ mod core;
 mod data;
 mod layers;
 mod macros;
-mod measurements;
+pub mod measurements;
 mod payments;
 mod store;
 
@@ -85,6 +85,7 @@ pub mod traits;
 pub use self::auth::*;
 pub use self::core::*;
 pub use self::data::*;
+pub use self::measurements::*;
 pub use self::payments::*;
 pub use muon;
 use muon::rt::{AsyncResolver, ResolverExt, with_fallback};
