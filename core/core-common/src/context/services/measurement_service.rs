@@ -9,7 +9,7 @@ use super::Service;
 use crate::datatypes::{
     MeasurementData, MeasurementEventType, MeasurementValue, UnixTimestamp, UnixTimestampMs,
 };
-use crate::models::Measurement;
+use crate::models::{Measurement, ModelExtension};
 use crate::{CoreContextError, UserContext};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::measurements::requests::{
@@ -25,7 +25,7 @@ use stash::stash::{Stash, StashError};
 
 const MEASUREMENT_SEND_INTERVAL_SECS: u64 = 60;
 const MEASUREMENT_BATCH_SIZE: usize = 100;
-const MEASUREMENT_FF_NAME: &str = "MailAndroidV7EventsKS";
+const MEASUREMENT_FF_NAME: &str = "MailAndroidV7Events";
 
 #[derive(Debug, Clone)]
 struct MeasurementMetadata {
@@ -221,10 +221,8 @@ impl MeasurementService {
         service: &MeasurementService,
     ) -> anyhow::Result<()> {
         let measurements = {
-            let mut tether = ctx.account_stash().connection().await?;
-            tether
-                .tx(async |tx| Measurement::take_batch(MEASUREMENT_BATCH_SIZE, tx).await)
-                .await?
+            let tether = ctx.account_stash().connection().await?;
+            Measurement::fetch_batch(MEASUREMENT_BATCH_SIZE, &tether).await?
         };
 
         if measurements.is_empty() {
@@ -246,9 +244,18 @@ impl MeasurementService {
         }
 
         let session_start_ms = *service.session_start_ms.read();
+        let measurement_ids = measurements
+            .iter()
+            .filter_map(|measurement| measurement.local_id)
+            .collect::<Vec<_>>();
         let events = Self::build_events_from_measurements(measurements, session_start_ms);
 
         Self::send_single_batch(ctx, service, events).await?;
+
+        let mut tether = ctx.account_stash().connection().await?;
+        tether
+            .tx(async |tx| Measurement::delete_by_ids(measurement_ids, tx).await)
+            .await?;
 
         Ok(())
     }
@@ -282,7 +289,7 @@ impl MeasurementService {
             trace!("Telemetry disabled for user, clearing measurements");
             let mut tether = ctx.account_stash().connection().await?;
             tether
-                .tx(async |tx| Measurement::clear_all(tx).await)
+                .tx(async |tx| Measurement::delete_all(tx).await)
                 .await?;
 
             return Ok(());

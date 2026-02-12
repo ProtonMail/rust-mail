@@ -12,6 +12,27 @@ use stash::utils::sql_using_serde;
 
 use super::UnixTimestampMs;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct LocalMeasurementId(u64);
+impl From<u64> for LocalMeasurementId {
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+impl FromSql for LocalMeasurementId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        u64::column_result(value).map(LocalMeasurementId)
+    }
+}
+
+impl ToSql for LocalMeasurementId {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        self.0.to_sql()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
