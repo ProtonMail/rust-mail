@@ -203,8 +203,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
         body: &str,
         metadata: &crate::traits::MessageMetadata,
     ) -> Document {
-        let body_doc_id = format!("{message_id}_body");
-        Document::new(&body_doc_id)
+        Document::new(message_id)
             .with_attribute(field::BODY, Value::text(body))
             .with_attribute(field::SUBJECT, Value::text(metadata.subject.as_str()))
             .with_attribute(field::FROM, Value::text(metadata.from.as_str()))
@@ -567,11 +566,7 @@ impl<S: BlobStorage + Clone + 'static> FoundationSearchEngine<S> {
     pub async fn remove_message(&mut self, message_id: &str) -> Result<IndexResult, SearchError> {
         debug!("Removing message {:?} from search index", message_id);
 
-        let metadata_doc_id = message_id.to_string();
-        let body_doc_id = format!("{message_id}_body");
-
-        self.remove_documents(&[&metadata_doc_id, &body_doc_id])
-            .await
+        self.remove_documents(&[message_id]).await
     }
 
     /// Run cleanup to delete obsolete blobs

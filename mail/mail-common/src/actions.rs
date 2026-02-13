@@ -182,9 +182,12 @@ pub(crate) fn register_actions(
             );
             reg(queue, messages::MoveHandler { api: api.clone() });
             reg(queue, messages::DeleteHandler { api: api.clone() });
-            reg(
+            replace(
                 queue,
-                messages::DeleteAllMessagesInLabelHandler { api: api.clone() },
+                messages::DeleteAllMessagesInLabelHandler {
+                    api: api.clone(),
+                    ctx: ctx.clone(),
+                },
             );
             reg(queue, messages::ReadHandler { api: api.clone() });
             reg(queue, messages::UnreadHandler { api: api.clone() });

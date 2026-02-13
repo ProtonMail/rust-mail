@@ -475,7 +475,7 @@ mod rebase {
 
         let tether = &mut user_ctx.user_stash().connection().await.unwrap();
 
-        let mut conv_data1 = hash_map! {
+        let mut conv_data1 = velcro::hash_map! {
             vec![LabelId::inbox(),custom_label_id1()]: vec![
                 conversation!(remote_id: conv_id!("my_conv"),
             labels: vec![ConversationLabel{remote_label_id:Some(LabelId::all_mail()), ..ConversationLabel::test_default()}]),
@@ -483,7 +483,7 @@ mod rebase {
         };
         conv_data1.save_to_database(tether).await;
 
-        let mut conv_data2 = hash_map! {
+        let mut conv_data2 = velcro::hash_map! {
             vec![LabelId::inbox(), custom_label_id2()]: vec![
                 conversation!(remote_id: conv_id!("my_conv2"),
             labels: vec![ConversationLabel{remote_label_id:Some(LabelId::all_mail()), ..ConversationLabel::test_default()}]),
@@ -495,7 +495,7 @@ mod rebase {
             .unwrap()[0];
 
         // Message with unread, custom label.
-        let mut msg_data = hash_map! {
+        let mut msg_data = velcro::hash_map! {
             vec![LabelId::inbox(), custom_label_id1()]:
             vec![message!(
                     remote_id: msg_id!("my_message"),
@@ -515,7 +515,7 @@ mod rebase {
         let conv = &conv_data2
             .get(&vec![LabelId::inbox(), custom_label_id2()])
             .unwrap()[0];
-        let mut msg_data = hash_map! {
+        let mut msg_data = velcro::hash_map! {
         vec![LabelId::inbox(), custom_label_id2()]:
         vec![message!(
                 remote_id: msg_id!("my_message_2"),

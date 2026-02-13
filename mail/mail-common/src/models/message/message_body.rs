@@ -1,4 +1,6 @@
 use crate::datatypes::LocalMessageId;
+#[cfg(feature = "foundation_search")]
+use crate::search::MailSearchService;
 use indoc::indoc;
 use proton_crypto_inbox::message::RawDecryptedBody;
 use proton_sqlite3::rusqlite;
@@ -10,6 +12,8 @@ use stash::{
     params,
     stash::{Bond, StashError, Tether},
 };
+#[cfg(feature = "foundation_search")]
+use tracing::debug;
 use tracing::instrument;
 use types::{FromSqlResult, ValueRef};
 
@@ -121,6 +125,7 @@ impl RawMessageBody {
         Ok(rows.into_iter().next())
     }
 
+    /// Store the message body
     #[instrument(skip_all, fields(id=%id))]
     pub async fn store(&self, id: LocalMessageId, tx: &Bond<'_>) -> Result<(), StashError> {
         self.clone().store_and_consume(id, tx).await
@@ -132,6 +137,24 @@ impl RawMessageBody {
         id: LocalMessageId,
         tx: &Bond<'_>,
     ) -> Result<(), StashError> {
+        // Extract values from self before moving to avoid borrow checker issues.
+        // They are needed both for the database insert and for search indexing
+        // that happens after self is moved/consumed in the params! macro.
+        #[cfg(feature = "foundation_search")]
+        let should_index = self.decryption_error.is_none() && !self.body.is_empty();
+        #[cfg(feature = "foundation_search")]
+        let body_len = self.body.len();
+        #[cfg(feature = "foundation_search")]
+        let has_decryption_error = self.decryption_error.is_some();
+        #[cfg(feature = "foundation_search")]
+        let is_body_empty = self.body.is_empty();
+
+        let body = self.body;
+        let signatures = self.signatures;
+        let raw_message_id = self.raw_message_id;
+        let decryption_error = self.decryption_error;
+        let raw_type = self.raw_type;
+
         tx.execute(
             indoc! {"
                 INSERT INTO raw_message_body (
@@ -153,18 +176,39 @@ impl RawMessageBody {
                 "},
             params![
                 id,
-                self.body,
-                self.signatures,
-                self.raw_message_id,
-                self.decryption_error,
-                self.raw_type
+                body,
+                signatures,
+                raw_message_id,
+                decryption_error,
+                raw_type
             ],
         )
         .await?;
 
+        #[cfg(feature = "foundation_search")]
+        {
+            if should_index {
+                tracing::info!(
+                    "Queueing search index intent for message {} (raw body length: {})",
+                    id,
+                    body_len
+                );
+                MailSearchService::queue_index(id.as_u64(), tx).await?;
+                tracing::info!("Search index intent queued for message {}", id);
+            } else {
+                tracing::debug!(
+                    "Skipping search index intent for message {}: decryption_error={:?}, body_empty={}",
+                    id,
+                    has_decryption_error,
+                    is_body_empty
+                );
+            }
+        }
+
         Ok(())
     }
 
+    /// Delete the message body
     #[instrument(skip_all, fields(id=%id))]
     pub async fn delete(id: LocalMessageId, tx: &Bond<'_>) -> Result<(), StashError> {
         tx.execute(
@@ -172,6 +216,13 @@ impl RawMessageBody {
             params![id],
         )
         .await?;
+
+        // Queue for search removal (will be processed by worker)
+        #[cfg(feature = "foundation_search")]
+        {
+            MailSearchService::queue_remove(id.as_u64(), tx).await?;
+            debug!("Queued search removal for message {}", id);
+        }
 
         Ok(())
     }

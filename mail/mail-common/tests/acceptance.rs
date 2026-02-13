@@ -18,8 +18,8 @@ mod acceptance {
     mod draft_send;
     mod draft_undo_send;
     mod drafts_common;
-    mod events;
-    mod init;
+    #[cfg(feature = "foundation_search")]
+    mod foundation_search_integration;
     mod mailbox_conversation;
     mod mailbox_create;
     mod message_body;

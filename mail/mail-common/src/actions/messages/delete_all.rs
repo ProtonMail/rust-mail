@@ -1,3 +1,4 @@
+use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::{ConversationCounter, LabelExt, Message, MessageCounter};
@@ -16,6 +17,7 @@ use stash::UserDb;
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 use std::mem;
+use std::sync::Weak;
 use tracing::{info, instrument, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -94,6 +96,7 @@ impl Action<UserDb> for DeleteAllMessagesInLabel {
 
 pub struct DeleteAllMessagesInLabelHandler {
     pub api: Session,
+    pub ctx: Weak<MailUserContext>,
 }
 
 impl DeleteAllMessagesInLabelHandler {
@@ -181,7 +184,10 @@ impl Handler<UserDb> for DeleteAllMessagesInLabelHandler {
         let label = self.label(action, tx).await?;
 
         label.mark_idle(tx).await?;
-        Message::mark_undeleted(mem::take(&mut action.ids_for_rollback), tx).await?;
+        let message_ids = mem::take(&mut action.ids_for_rollback);
+        Message::mark_undeleted(message_ids, tx).await?;
+
+        // Note: No need to re-index on undelete. Message content hasn't changed.
 
         if let Some(total) = action.prev_msg_total
             && let Some(unread) = action.prev_msg_unread
@@ -235,6 +241,11 @@ impl Handler<UserDb> for DeleteAllMessagesInLabelHandler {
             //
             // That's why we cannot mark the label as idle back again here.
         }
+
+        // Note: Search removal is handled by the event loop when the server
+        // sends delete events. See user_context/events/messages.rs.
+        // This ensures ALL deleted messages are removed from the index,
+        // including ones not yet synced to this client.
 
         Ok(())
     }

@@ -324,7 +324,7 @@ impl BackgroundAwareTaskState {
 /// Internally we will ensure the underlying [`TaskService`] is paused only when required, allowing
 /// it to be safely shared between various background tasks and the main application.
 pub struct BackgroundAwareTaskService {
-    service: TaskService,
+    service: Arc<TaskService>,
     state: Mutex<BackgroundAwareTaskState>,
 }
 
@@ -334,7 +334,7 @@ impl BackgroundAwareTaskService {
     pub fn new(service: TaskService) -> Self {
         Self {
             state: Mutex::new(BackgroundAwareTaskState::new()),
-            service,
+            service: Arc::new(service),
         }
     }
 
@@ -435,8 +435,20 @@ impl BackgroundAwareTaskService {
         self.service.spawn_cancellable(token, future)
     }
 
+    /// Get a reference to the underlying `TaskService`.
+    ///
+    /// This method is provided for bwd compat. For new code that needs
+    /// to share the `TaskService` instance, use [`task_service_arc()`](Self::task_service_arc) instead.
     pub fn task_service(&self) -> &TaskService {
         &self.service
+    }
+
+    /// Get an `Arc` reference to the underlying `TaskService`.
+    ///
+    /// This allows sharing the same `TaskService` instance across multiple compoents
+    /// without creating duplicate instances.
+    pub fn task_service_arc(&self) -> Arc<TaskService> {
+        self.service.clone()
     }
 }
 

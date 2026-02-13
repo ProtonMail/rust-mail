@@ -8,4 +8,5 @@ pub mod event_subscribers_compat;
 
 pub mod labels;
 pub mod messages;
+pub mod search;
 pub mod v6;

@@ -14,6 +14,8 @@ use crate::models::{
     DraftSendResultOrigin, MailSettings, Message, MessageCounter, MessageMimeType, MetadataId,
     RawMessageBody, RollbackItem,
 };
+#[cfg(feature = "foundation_search")]
+use crate::search::MailSearchService;
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use chrono::{DateTime, Local};
 use proton_action_queue::action::{
@@ -551,6 +553,14 @@ impl Send {
                         DraftMetadata::delete(action.metadata_id, tx)
                             .await
                             .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
+
+                        // Queue the sent message for search indexing
+                        // Draft bodies are skipped during editing; we index now that it's finalized
+                        #[cfg(feature = "foundation_search")]
+                        MailSearchService::queue_index(local_message_id.as_u64(), tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to queue search index after send: {e:?}"))?;
+
                         Ok(())
                     })
                     .await?;
