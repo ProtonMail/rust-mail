@@ -340,7 +340,7 @@ impl MailUserSession {
         event_type: MeasurementEventType,
         asid: String,
         app_package_name: String,
-        fields: HashMap<String, MeasurementValue>,
+        fields: HashMap<String, Option<MeasurementValue>>,
     ) -> Result<(), UserSessionError> {
         let ctx = self.ctx()?;
         let new_session = matches!(event_type, MeasurementEventType::Open { new_session: true });
@@ -352,7 +352,10 @@ impl MailUserSession {
                 service.clear_session_start();
             }
 
-            let fields = fields.into_iter().map(|(k, v)| (k, v.into())).collect();
+            let fields = fields
+                .into_iter()
+                .map(|(k, v)| (k, v.map(Into::into)))
+                .collect();
             service
                 .record(event_type.into(), asid, app_package_name, fields)
                 .await

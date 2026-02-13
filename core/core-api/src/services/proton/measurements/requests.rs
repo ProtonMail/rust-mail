@@ -22,7 +22,7 @@ pub struct PostMeasurementEventRequest {
     // In case new field is introduced - no Rust change is needed.
     // In case of new event-type, only one flat enum has to change.
     #[serde(flatten)]
-    pub fields: HashMap<String, MeasurementValue>,
+    pub fields: HashMap<String, Option<MeasurementValue>>,
 }
 
 pub type PostMeasurementEventsRequest = Vec<PostMeasurementEventRequest>;
