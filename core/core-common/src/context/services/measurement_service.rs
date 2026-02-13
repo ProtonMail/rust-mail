@@ -60,7 +60,7 @@ impl MeasurementService {
         event_type: MeasurementEventType,
         asid: String,
         app_package_name: String,
-        fields: HashMap<String, MeasurementValue>,
+        fields: HashMap<String, Option<MeasurementValue>>,
     ) -> Result<(), StashError> {
         let measurement_data = MeasurementData {
             event_type,
@@ -96,7 +96,7 @@ impl MeasurementService {
         event_type: MeasurementEventType,
         asid: String,
         app_package_name: String,
-        fields: HashMap<String, MeasurementValue>,
+        fields: HashMap<String, Option<MeasurementValue>>,
     ) -> Result<(), CoreContextError> {
         let Some(ctx) = self.ctx.upgrade() else {
             trace!("Context dropped, not recording measurement");
@@ -199,7 +199,7 @@ impl MeasurementService {
                     .fields
                     .into_iter()
                     .map(|(k, v)| {
-                        let api_value: ApiMeasurementValue = v.into();
+                        let api_value: Option<ApiMeasurementValue> = v.map(Into::into);
                         (k, api_value)
                     })
                     .collect();

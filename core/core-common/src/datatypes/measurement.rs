@@ -119,7 +119,7 @@ pub struct MeasurementData {
     pub asid: String,
     pub app_package_name: String,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub fields: HashMap<String, MeasurementValue>,
+    pub fields: HashMap<String, Option<MeasurementValue>>,
 }
 
 sql_using_serde!(MeasurementData);
