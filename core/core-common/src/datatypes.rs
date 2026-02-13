@@ -43,9 +43,11 @@ pub mod contact_details;
 mod contact_list;
 mod dependencies;
 mod issue_report;
+mod measurement;
 mod push_notifications;
 mod system_label;
 mod timestamp;
+mod timestamp_ms;
 mod user_feature_flags;
 
 pub use self::account_details::AccountDetails;
@@ -53,9 +55,11 @@ pub use self::avatar::AvatarInformation;
 pub use self::contact_list::*;
 pub use self::dependencies::*;
 pub use self::issue_report::*;
+pub use self::measurement::*;
 pub use self::push_notifications::*;
 pub use self::system_label::*;
 pub use self::timestamp::*;
+pub use self::timestamp_ms::*;
 pub use self::user_feature_flags::*;
 
 use bitflags::bitflags;
