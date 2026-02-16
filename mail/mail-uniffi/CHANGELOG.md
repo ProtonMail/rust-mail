@@ -24,11 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [FOUN-281] added TODO ET-5871
 
 
-## [mail-uniffi-v0.163.1] - 2026-02-10
+## [mail-uniffi-v0.162.4] - 2026-02-16
 
-### Features
+### Fixes
 
-- [ET-5848] Create API endpoint for measurements
+- [ET-5882] Missing handler for event provider fetches
 
 
 ## [mail-uniffi-v0.162.3] - 2026-02-10
@@ -38,11 +38,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Conflicts between Cargo.lock
 
 
+## [mail-uniffi-v0.163.1] - 2026-02-10
+
+### Features
+
+- [ET-5848] Create API endpoint for measurements
+
+
 ## [mail-uniffi-v0.161.26] - 2026-02-10
 
 ### Fixes
 
 - [ET-5853] 2fa checking and device registration
+
+
+## [mail-uniffi-v0.163.0] - 2026-02-10
+
+### Changed
+
+- Add Stash marker generic attribute
+- Update uniffi to v0.31.0
+- [Breaking] Rename scroller `handle()` to `watch_handle()`
+
+### Features
+
+- [FOUN-281] Upgrade proton-foundation-search to 1.1.1
+- [ET-5787] Add label dependency fetching for rollback items
+
+### Fixes
+
+- Clippy lints
+
 
 ## [mail-uniffi-v0.161.25] - 2026-02-06
 
@@ -67,7 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Replace DefaultDb with UserDb
 - Migrate migrations to explicit userDb type
-- Add Stash marker generic attribute
 - Stash -> Stash<UserDb>
 - Add AccountDb marker to account related models
 - Make database attribute required
