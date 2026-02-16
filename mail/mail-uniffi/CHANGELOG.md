@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.163.2] - 2026-02-16
+
+### Features
+
+- [ET-5849] Migrations and models for measurements cache
+- [ET-5849] Measurement service
+- [FOUN-281] Integrate Foundation Search into mail-common
+- [ET-5849] Expose measurements to uniffi
+- [ET-5849] Allow for nullable measurement value
+
+### Fixes
+
+- [FOUN-281] Address review comments on Foundation Search integration
+- [FOUN-281] Revert feature guards in mail-search and enable foundation_search tests in CI
+- update email_address dependency
+- [FOUN-281] addressing latest minor comments
+- [FOUN-281] added TODO ET-5871
+
+
 ## [mail-uniffi-v0.163.1] - 2026-02-10
 
 ### Features
