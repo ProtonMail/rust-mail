@@ -377,6 +377,9 @@ impl UserContext {
                 {
                     // do no report, this error is retryable
                 }
+                EventLoopError::Provider(e) if e.is_network_failure() => {
+                    // do no report, this error is retryable
+                }
                 e => {
                     self.issue_reporter_service().report(
                         IssueLevel::Critical,
