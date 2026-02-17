@@ -4,6 +4,7 @@ pub mod context_init;
 pub mod global_feature_flags_popup;
 pub mod login;
 pub mod mailbox;
+pub mod mbox_password;
 pub mod path_select_popup;
 pub mod session_select;
 pub mod twofa;
@@ -17,6 +18,7 @@ use crate::app_model::contacts::ContactsModel;
 use crate::app_model::context_init::ContextInitModel;
 use crate::app_model::login::LoginModel;
 use crate::app_model::mailbox::MailboxModel;
+use crate::app_model::mbox_password::MboxPasswordModel;
 use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::app_model::twofa::TwoFaModel;
 use crate::keychain::AppKeyChain;
@@ -65,6 +67,8 @@ pub enum AppState {
     Login(LoginModel),
     /// Submit 2FA code.
     TwoFA(TwoFaModel),
+    /// Mailbox password
+    MboxPassowrd(MboxPasswordModel),
     /// Initialize the user context.
     ContextInit(ContextInitModel),
     /// Display conversation/messages.
@@ -518,6 +522,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.on_state_enter(),
             AppState::Contacts(state) => state.on_state_enter(),
             AppState::Background(state) => state.on_state_enter(),
+            AppState::MboxPassowrd(state) => state.on_state_enter(),
         }
     }
 
@@ -538,6 +543,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.handle_event(event),
             AppState::Contacts(state) => state.handle_event(event),
             AppState::Background(state) => state.handle_event(event),
+            AppState::MboxPassowrd(state) => state.handle_event(event),
         }
     }
 
@@ -550,6 +556,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.update(ctx, message),
             AppState::Contacts(state) => state.update(ctx, message),
             AppState::Background(state) => state.update(ctx, message),
+            AppState::MboxPassowrd(state) => state.update(ctx, message),
         }
     }
 
@@ -562,6 +569,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.view(frame, area),
             AppState::Contacts(state) => state.view(frame, area),
             AppState::Background(state) => state.view(frame, area),
+            AppState::MboxPassowrd(state) => state.view(frame, area),
         }
     }
 
@@ -574,6 +582,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.view_help_bar(frame, area),
             AppState::Contacts(state) => state.view_help_bar(frame, area),
             AppState::Background(state) => state.view_help_bar(frame, area),
+            AppState::MboxPassowrd(state) => state.view_status_bar(frame, area),
         }
     }
 
@@ -586,6 +595,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.view_status_bar(frame, area),
             AppState::Contacts(state) => state.view_status_bar(frame, area),
             AppState::Background(state) => state.view_status_bar(frame, area),
+            AppState::MboxPassowrd(state) => state.view_status_bar(frame, area),
         }
     }
 
@@ -598,6 +608,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.help_bar_lines(),
             AppState::Contacts(state) => state.help_bar_lines(),
             AppState::Background(state) => state.help_bar_lines(),
+            AppState::MboxPassowrd(state) => state.help_bar_lines(),
         }
     }
 
@@ -610,6 +621,7 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.help_options(),
             AppState::Contacts(state) => state.help_options(),
             AppState::Background(state) => state.help_options(),
+            AppState::MboxPassowrd(state) => state.help_options(),
         }
     }
 }

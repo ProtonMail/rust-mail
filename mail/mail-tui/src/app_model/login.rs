@@ -1,5 +1,6 @@
 use crate::CLI_ARGS;
 use crate::app::Command;
+use crate::app_model::mbox_password::MboxPasswordModel;
 use crate::app_model::twofa::TwoFaModel;
 use crate::app_model::{AppState, AppStateHandler, context_init};
 use crate::messages::Messages;
@@ -218,6 +219,10 @@ impl AppStateHandler for LoginModel {
             Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(TwoFaModel::new(flow).into()))
+                } else if flow.is_awaiting_mailbox_password() {
+                    Command::message(Messages::SwitchAppState(
+                        MboxPasswordModel::new(flow).into(),
+                    ))
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
