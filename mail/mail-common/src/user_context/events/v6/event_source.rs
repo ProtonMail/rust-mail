@@ -103,19 +103,32 @@ impl MailEventCache {
             return Err(first_err);
         }
 
+        // For new labels we need to fetch counters
+        let mut label_counter_ids = event
+            .labels
+            .as_ref()
+            .map(|l| {
+                l.iter()
+                    .filter_map(|event| {
+                        (event.action == Action::Create).then_some(event.id.clone())
+                    })
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+
         // calculate label counters to fetch
-        let label_counter_ids = self
-            .messages
-            .values()
-            .flat_map(|m| &m.label_ids)
-            .cloned()
-            .chain(
-                self.conversations
-                    .values()
-                    .flat_map(|l| &l.labels)
-                    .map(|l| l.remote_label_id.clone().expect("Is always set")),
-            )
-            .collect::<HashSet<LabelId>>();
+        label_counter_ids.extend(
+            self.messages
+                .values()
+                .flat_map(|m| &m.label_ids)
+                .cloned()
+                .chain(
+                    self.conversations
+                        .values()
+                        .flat_map(|l| &l.labels)
+                        .map(|l| l.remote_label_id.clone().expect("Is always set")),
+                ),
+        );
 
         if !label_counter_ids.is_empty() {
             tracing::info!("Fetching counters");
@@ -305,7 +318,7 @@ impl MailEventCache {
         const MAX_ITEMS_PER_REQUEST: usize = 50;
         tasks.extend(
             ids.into_iter()
-                .filter(|id| self.message_counters.contains_key(id))
+                .filter(|id| !self.message_counters.contains_key(id))
                 .chunks(MAX_ITEMS_PER_REQUEST)
                 .into_iter()
                 .map(|ids| -> FutureTask {
@@ -331,7 +344,7 @@ impl MailEventCache {
         const MAX_ITEMS_PER_REQUEST: usize = 50;
         tasks.extend(
             ids.into_iter()
-                .filter(|id| self.conversation_counters.contains_key(id))
+                .filter(|id| !self.conversation_counters.contains_key(id))
                 .chunks(MAX_ITEMS_PER_REQUEST)
                 .into_iter()
                 .map(|ids| -> FutureTask {
@@ -375,6 +388,7 @@ impl MailEventCache {
 
 type FutureTask = BoxFuture<'static, Result<FetchData, ApiServiceError>>;
 
+#[derive(Debug)]
 enum FetchData {
     Label(Vec<Label>),
     Conversation(Vec<Conversation>),

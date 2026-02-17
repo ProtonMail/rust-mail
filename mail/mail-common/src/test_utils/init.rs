@@ -40,7 +40,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 use velcro::hash_map;
 use wiremock::matchers::{body_json, method, path, query_param};
-use wiremock::{Mock, MockBuilder, ResponseTemplate, Times};
+use wiremock::{Match, Mock, MockBuilder, ResponseTemplate, Times};
 
 #[derive(Clone, Default)]
 pub struct Params {
@@ -490,6 +490,26 @@ impl MailTestContext {
     }
 
     #[function_name::named]
+    pub async fn mock_get_messages_count_with_ids(
+        &self,
+        ids: Vec<LabelId>,
+        counts: Vec<ApiMessageCount>,
+        expect: impl Into<Times>,
+    ) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages/count"));
+        for id in ids {
+            mock = mock.and(QueryArrayMatcher::new("LabelIDs", id.into_inner()));
+        }
+        mock.respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesCountResponse { counts }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .mount(self.mock_server())
+        .await;
+    }
+
+    #[function_name::named]
     pub async fn mock_get_conversations_count(
         &self,
         counts: Option<Vec<ApiConversationCount>>,
@@ -505,6 +525,26 @@ impl MailTestContext {
             .named(function_name!())
             .mount(self.mock_server())
             .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_get_conversations_count_with_ids(
+        &self,
+        ids: Vec<LabelId>,
+        counts: Vec<ApiConversationCount>,
+        expect: impl Into<Times>,
+    ) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/conversations/count"));
+        for id in ids {
+            mock = mock.and(QueryArrayMatcher::new("LabelIDs", id.into_inner()));
+        }
+        mock.respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsCountResponse { counts }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .mount(self.mock_server())
+        .await;
     }
 
     #[function_name::named]
@@ -609,3 +649,30 @@ pub static DEFAULT_MAIL_SETTINGS: LazyLock<ApiMailSettings> = LazyLock::new(|| A
     hide_embedded_images: false,
     hide_sender_images: false,
 });
+
+// matches against any array based query paremeter. checks for the presense of `key[` and wether
+// the value matches
+struct QueryArrayMatcher {
+    key: String,
+    value: String,
+}
+
+impl QueryArrayMatcher {
+    fn new(key: impl Into<String>, value: impl Into<String>) -> Self {
+        let mut instance = Self {
+            key: key.into(),
+            value: value.into(),
+        };
+        instance.key.push('[');
+        instance
+    }
+}
+
+impl Match for QueryArrayMatcher {
+    fn matches(&self, request: &wiremock::Request) -> bool {
+        request
+            .url
+            .query_pairs()
+            .any(|q| q.0.starts_with(self.key.as_str()) && q.1.contains(self.value.as_str()))
+    }
+}

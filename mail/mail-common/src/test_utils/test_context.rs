@@ -218,6 +218,12 @@ pub trait MailUserContextTestExtension {
     async fn wait_for(&self, timeout: Option<Duration>, fun: impl Fn(ConnectionStatus) -> bool);
 
     async fn apply_event(&self, event: MailEvent) -> EventSubscriberResult<()>;
+
+    #[cfg(feature = "events-v6")]
+    async fn apply_mail_event_v6(
+        &self,
+        event: proton_mail_api::services::proton::prelude::MailEventV6,
+    ) -> EventSubscriberResult<()>;
 }
 
 impl MailUserContextTestExtension for MailUserContext {
@@ -253,6 +259,18 @@ impl MailUserContextTestExtension for MailUserContext {
         let mut cache = CoreEventCache::default();
         self.event_subscriber()
             .on_event(&combined_event, &mut cache)
+            .await
+    }
+
+    #[cfg(feature = "events-v6")]
+    async fn apply_mail_event_v6(
+        &self,
+        event: proton_mail_api::services::proton::prelude::MailEventV6,
+    ) -> EventSubscriberResult<()> {
+        use proton_event_loop::v6::EventSubscriber;
+        let mut cache = <crate::events::v6::MailEventSourceV6 as proton_event_loop::v6::EventSource>::Cache::default();
+        crate::events::v6::MailEventV6Subscriber::from(self.as_weak())
+            .on_event(&event, &mut cache)
             .await
     }
 }

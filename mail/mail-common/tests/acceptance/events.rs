@@ -639,3 +639,213 @@ async fn events_skips_unresolved_labels() {
     assert!(!message.label_ids.contains(&missing_label_2.id));
     assert!(message.label_ids.contains(&missing_label_1.id));
 }
+
+#[cfg(feature = "events-v6")]
+mod v6 {
+    use proton_core_common::models::ModelExtension;
+    use proton_mail_api::services::proton::prelude::{
+        ConversationCount, MailConversationEventV6, MailEventV6, MailLabelEventV6,
+        MailMessageEventV6, MessageCount,
+    };
+    use proton_mail_common::{
+        datatypes::SystemLabelId,
+        models::{Conversation, ConversationCounter, MessageCounter},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn events_fetches_relevant_counters() {
+        let ctx = MailTestContext::new().await;
+        let params = Params::default_basic();
+
+        let conv_id = ConversationId::from("ConvId");
+        let msg_id = MessageId::from("MessageId");
+        let label_id = LabelId::from("Folder");
+
+        let new_label = ApiLabel {
+            id: label_id.clone(),
+            parent_id: None,
+            color: "".to_string(),
+            display: false,
+            expanded: false,
+            label_type: ApiLabelType::Folder,
+            name: "Folder".to_string(),
+            notify: false,
+            order: 0,
+            path: None,
+            sticky: false,
+        };
+
+        let new_conversation = ApiConversation {
+            id: conv_id.clone(),
+            attachment_info: Default::default(),
+            attachments_metadata: vec![],
+            display_snoozed_reminder: false,
+            expiration_time: 0,
+            labels: vec![ApiConversationLabel {
+                id: LabelId::starred(),
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 0,
+                context_num_unread: 0,
+                context_size: 0,
+                context_snooze_time: 0,
+                context_time: 0,
+            }],
+            num_attachments: 0,
+            num_messages: 0,
+            num_unread: 0,
+            order: 0,
+            recipients: vec![],
+            senders: vec![],
+            size: 0,
+            subject: "".to_string(),
+            context_time: None,
+        };
+
+        let new_message = ApiMessageMetadata {
+            id: msg_id.clone(),
+            conversation_id: new_conversation.id.clone(),
+            address_id: params.addresses[0].id.clone(),
+            attachments_metadata: vec![],
+            bcc_list: vec![],
+            cc_list: vec![],
+            expiration_time: 0,
+            external_id: None,
+            flags: MessageFlags::empty(),
+            is_forwarded: false,
+            is_replied: false,
+            is_replied_all: false,
+            label_ids: vec![LabelId::starred()],
+            num_attachments: 0,
+            order: 0,
+            sender: Default::default(),
+            size: 0,
+            snooze_time: 0,
+            subject: "".to_string(),
+            time: 0,
+            to_list: vec![],
+            unread: false,
+        };
+
+        let starred_msg_count = MessageCount {
+            label_id: LabelId::starred(),
+            total: 100,
+            unread: 200,
+        };
+        let label_msg_count = MessageCount {
+            label_id: label_id.clone(),
+            total: 400,
+            unread: 300,
+        };
+
+        let starred_conv_count = ConversationCount {
+            label_id: LabelId::starred(),
+            total: 1000,
+            unread: 2000,
+        };
+        let label_conv_count = ConversationCount {
+            label_id: label_id.clone(),
+            total: 4000,
+            unread: 3000,
+        };
+
+        ctx.setup_user(params.clone()).await;
+
+        let user_context = ctx.mail_user_context().await;
+
+        ctx.mock_server().reset().await;
+
+        ctx.mock_get_labels_by_ids(vec![new_label]).await;
+        ctx.mock_get_message_metadata_page(vec![new_message.clone()], None, None, 50, 1, 1)
+            .await;
+        ctx.mock_get_conversations_page(vec![new_conversation.clone()], None, None, 50, 1, 1)
+            .await;
+
+        ctx.mock_get_messages_count_with_ids(
+            vec![label_id.clone(), LabelId::starred()],
+            vec![starred_msg_count.clone(), label_msg_count.clone()],
+            1,
+        )
+        .await;
+        ctx.mock_get_conversations_count_with_ids(
+            vec![label_id.clone(), LabelId::starred()],
+            vec![starred_conv_count.clone(), label_conv_count.clone()],
+            1,
+        )
+        .await;
+
+        let event = MailEventV6 {
+            event_id: EventId::from("MyEventId"),
+            labels: Some(vec![MailLabelEventV6 {
+                id: label_id.clone(),
+                action: Action::Create,
+            }]),
+            conversations: Some(vec![MailConversationEventV6 {
+                id: new_conversation.id.clone(),
+                action: Action::Create,
+            }]),
+            incoming_defaults: None,
+            mail_settings: None,
+            messages: Some(vec![MailMessageEventV6 {
+                id: new_message.id.clone(),
+                action: Action::Create,
+            }]),
+            refresh: false,
+            has_more: false,
+        };
+
+        user_context.apply_mail_event_v6(event).await.unwrap();
+        let tether = user_context.user_stash().connection().await.unwrap();
+
+        let local_label_id = Label::remote_id_counterpart(label_id.clone(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let local_starred_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            Message::remote_id_counterpart(msg_id.clone(), &tether)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            Conversation::remote_id_counterpart(conv_id.clone(), &tether)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        let msg_counter_starred = MessageCounter::find_by_id(local_starred_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let msg_counter_label = MessageCounter::find_by_id(local_label_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let conv_counter_starred = ConversationCounter::find_by_id(local_starred_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let conv_counter_label = ConversationCounter::find_by_id(local_label_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(msg_counter_label.unread, label_msg_count.unread);
+        assert_eq!(msg_counter_label.total, label_msg_count.total);
+        assert_eq!(msg_counter_starred.unread, starred_msg_count.unread);
+        assert_eq!(msg_counter_starred.total, starred_msg_count.total);
+
+        assert_eq!(conv_counter_label.unread, label_conv_count.unread);
+        assert_eq!(conv_counter_label.total, label_conv_count.total);
+        assert_eq!(conv_counter_starred.unread, starred_conv_count.unread);
+        assert_eq!(conv_counter_starred.total, starred_conv_count.total);
+    }
+}
