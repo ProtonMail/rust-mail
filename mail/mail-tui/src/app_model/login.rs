@@ -216,7 +216,7 @@ impl AppStateHandler for LoginModel {
                 ])
             }
             Message::QRLogin => Self::qr_login(ctx),
-            Message::LoginSuccess(mut flow) => {
+            Message::LoginSuccess(flow) => {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(TwoFaModel::new(flow).into()))
                 } else if flow.is_awaiting_mailbox_password() {
@@ -224,19 +224,9 @@ impl AppStateHandler for LoginModel {
                         MboxPasswordModel::new(flow).into(),
                     ))
                 } else {
-                    let ctx = Arc::clone(ctx);
-                    Command::task(async move {
-                        match ctx.user_context_from_login_flow(&mut flow).await {
-                            Ok(context) => Command::message(Messages::SwitchAppState(
-                                context_init::ContextInitModel::new(context).into(),
-                            )),
-                            Err(e) => {
-                                let e = anyhow!("Failed to login: {e}");
-                                tracing::error!("{e:?}");
-                                Command::message(Messages::DisplayError(None, e))
-                            }
-                        }
-                    })
+                    Command::message(Messages::SwitchAppState(
+                        context_init::ContextInitModel::new(flow).into(),
+                    ))
                 }
             }
             Message::LoginFailed(err) => {

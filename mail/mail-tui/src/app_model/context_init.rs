@@ -3,9 +3,8 @@ use crate::app_model::{AppState, AppStateHandler, mailbox};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
-use proton_mail_common::{
-    MailContext, MailContextError, MailUserContext, NewMailUserContextOptions,
-};
+use proton_account_api::login::LoginFlow;
+use proton_mail_common::{MailContext, MailContextError, MailUserContext};
 use ratatui::crossterm::event::Event;
 use ratatui::prelude::*;
 use std::sync::Arc;
@@ -13,24 +12,20 @@ use throbber_widgets_tui::ThrobberState;
 
 pub enum Message {
     Init,
-    InitComplete,
+    InitComplete(Arc<MailUserContext>),
     InitFailed(MailContextError),
 }
 pub struct ContextInitModel {
-    ctx: Arc<MailUserContext>,
+    flow: Option<LoginFlow>,
     throbber_state: ThrobberState,
 }
 
 impl ContextInitModel {
-    pub fn new(ctx: Arc<MailUserContext>) -> Self {
+    pub fn new(flow: LoginFlow) -> Self {
         Self {
-            ctx,
+            flow: Some(flow),
             throbber_state: ThrobberState::default(),
         }
-    }
-
-    pub fn ctx(&self) -> Arc<MailUserContext> {
-        Arc::clone(&self.ctx)
     }
 }
 
@@ -42,40 +37,46 @@ impl AppStateHandler for ContextInitModel {
         Command::none()
     }
 
-    fn update(&mut self, _: &Arc<MailContext>, message: Messages) -> Command<Messages> {
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::ContextInit(message) = message else {
             return Command::None;
         };
 
         match message {
             Message::Init => {
-                let user_ctx = self.ctx.clone();
+                let Some(mut flow) = self.flow.take() else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("No login flow"),
+                    ));
+                };
+                if !flow.is_logged_in() {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Login flow has invalid state"),
+                    ));
+                }
+
+                let ctx = ctx.clone();
                 Command::task(async move {
                     tracing::info!("Initializing user account");
-                    let msg = if let Err(e) = MailUserContext::initialize_async(
-                        user_ctx,
-                        NewMailUserContextOptions::default(),
-                    )
-                    .await
-                    {
-                        tracing::error!("Failed to initialize account {e:?}");
-                        Message::InitFailed(e)
-                    } else {
-                        Message::InitComplete
+                    let msg = match ctx.user_context_from_login_flow(&mut flow).await {
+                        Ok(ctx) => Message::InitComplete(ctx),
+                        Err(e) => {
+                            tracing::error!("Failed to initialize account {e:?}");
+                            Message::InitFailed(e)
+                        }
                     };
 
                     Command::message(msg)
                 })
             }
-            Message::InitComplete => {
-                let ctx = Arc::clone(&self.ctx);
-                Command::task(async move {
-                    match mailbox::MailboxModel::new(ctx).await {
-                        Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
-                        Err(e) => Command::message(e),
-                    }
-                })
-            }
+            Message::InitComplete(ctx) => Command::task(async move {
+                match mailbox::MailboxModel::new(ctx).await {
+                    Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
+                    Err(e) => Command::message(e),
+                }
+            }),
             Message::InitFailed(e) => {
                 Command::message(Messages::DisplayError(None, anyhow!("{e}")))
             }

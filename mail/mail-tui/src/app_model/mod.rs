@@ -398,7 +398,6 @@ impl Model<Messages> for AppModel {
             }
             Messages::SessionExpired(ref user_id) => {
                 if let Some(ctx) = match &self.state {
-                    AppState::ContextInit(state) => Some(state.ctx()),
                     AppState::Mailbox(state) => Some(state.ctx()),
                     AppState::Contacts(state) => Some(state.ctx()),
                     AppState::Background(state) => Some(state.ctx()),

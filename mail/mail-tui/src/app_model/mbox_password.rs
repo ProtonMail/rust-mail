@@ -47,7 +47,7 @@ impl AppStateHandler for MboxPasswordModel {
         }
     }
 
-    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
+    fn update(&mut self, _: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::MboxPassword(message) = message else {
             return Command::None;
         };
@@ -93,21 +93,11 @@ impl AppStateHandler for MboxPasswordModel {
                     }),
                 ])
             }
-            Message::Success(mut flow) => {
+            Message::Success(flow) => {
                 if flow.is_logged_in() {
-                    let ctx = Arc::clone(ctx);
-                    Command::task(async move {
-                        match ctx.user_context_from_login_flow(&mut flow).await {
-                            Ok(context) => Command::message(Messages::SwitchAppState(
-                                context_init::ContextInitModel::new(context).into(),
-                            )),
-                            Err(e) => {
-                                let e = anyhow!("Failed to login: {e}");
-                                tracing::error!("{e:?}");
-                                Command::message(Messages::DisplayError(None, e))
-                            }
-                        }
-                    })
+                    Command::message(Messages::SwitchAppState(
+                        context_init::ContextInitModel::new(flow).into(),
+                    ))
                 } else {
                     Command::message(Messages::DisplayError(None, anyhow!("Invalid State")))
                 }
