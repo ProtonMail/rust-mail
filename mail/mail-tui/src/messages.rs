@@ -15,6 +15,7 @@ pub enum Messages {
     ContextInit(crate::app_model::context_init::Message),
     Mailbox(crate::app_model::mailbox::Message),
     TwoFA(crate::app_model::twofa::Message),
+    MboxPassword(crate::app_model::mbox_password::Message),
     DisplayError(Option<String>, anyhow::Error),
     DisplayInfo(Option<String>, String),
     /// This message can be used to switch the application state.

@@ -1,5 +1,4 @@
 use crate::app::Command;
-use crate::app_model::mbox_password::MboxPasswordModel;
 use crate::app_model::{AppState, AppStateHandler, context_init, login};
 use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
@@ -15,25 +14,25 @@ use std::sync::Arc;
 pub enum Message {
     Abort,
     Submit,
-    TwoFASuccess(LoginFlow),
-    TwoFAFailed(LoginFlow, LoginError),
+    Success(LoginFlow),
+    Failed(LoginFlow, LoginError),
 }
 
-pub struct TwoFaModel {
+pub struct MboxPasswordModel {
     flow: Option<LoginFlow>,
     input_state: TextInputState,
 }
 
-impl TwoFaModel {
+impl MboxPasswordModel {
     pub fn new(flow: LoginFlow) -> Self {
         Self {
             flow: Some(flow),
-            input_state: TextInputState::new().selected(true),
+            input_state: TextInputState::new().selected(true).secret(true),
         }
     }
 }
 
-impl AppStateHandler for TwoFaModel {
+impl AppStateHandler for MboxPasswordModel {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
             return Command::None;
@@ -49,7 +48,7 @@ impl AppStateHandler for TwoFaModel {
     }
 
     fn update(&mut self, _: &Arc<MailContext>, message: Messages) -> Command<Messages> {
-        let Messages::TwoFA(message) = message else {
+        let Messages::MboxPassword(message) = message else {
             return Command::None;
         };
 
@@ -75,16 +74,16 @@ impl AppStateHandler for TwoFaModel {
                     ));
                 };
 
-                let code = self.input_state.value().to_owned();
+                let pass = self.input_state.value().to_owned();
                 Command::batch([
                     Command::Message(Messages::DisplayBackgroundProgress(
-                        "Submitting Two Factor Code ...".to_owned(),
+                        "Unlocking mailbox ...".to_owned(),
                     )),
                     Command::task(async move {
-                        let message = if let Err(e) = flow.submit_totp(code).await {
-                            Message::TwoFAFailed(flow, e)
+                        let message = if let Err(e) = flow.submit_mailbox_password(pass).await {
+                            Message::Failed(flow, e)
                         } else {
-                            Message::TwoFASuccess(flow)
+                            Message::Success(flow)
                         };
 
                         Command::batch([
@@ -94,12 +93,8 @@ impl AppStateHandler for TwoFaModel {
                     }),
                 ])
             }
-            Message::TwoFASuccess(flow) => {
-                if flow.is_awaiting_mailbox_password() {
-                    Command::message(Messages::SwitchAppState(
-                        MboxPasswordModel::new(flow).into(),
-                    ))
-                } else if flow.is_logged_in() {
+            Message::Success(flow) => {
+                if flow.is_logged_in() {
                     Command::message(Messages::SwitchAppState(
                         context_init::ContextInitModel::new(flow).into(),
                     ))
@@ -107,7 +102,7 @@ impl AppStateHandler for TwoFaModel {
                     Command::message(Messages::DisplayError(None, anyhow!("Invalid State")))
                 }
             }
-            Message::TwoFAFailed(flow, err) => {
+            Message::Failed(flow, err) => {
                 self.flow = Some(flow);
                 Command::message(Messages::DisplayError(None, anyhow!("{err}")))
             }
@@ -131,7 +126,7 @@ impl AppStateHandler for TwoFaModel {
             .areas(area);
 
         frame.render_stateful_widget(
-            TextInput::new("Two Factor Code:").with_max_label_length(15),
+            TextInput::new("Mbox Password:").with_max_label_length(15),
             email_area,
             &mut self.input_state,
         );
@@ -161,14 +156,14 @@ impl AppStateHandler for TwoFaModel {
     }
 }
 
-impl From<TwoFaModel> for AppState {
-    fn from(value: TwoFaModel) -> Self {
-        Self::TwoFA(value)
+impl From<MboxPasswordModel> for AppState {
+    fn from(value: MboxPasswordModel) -> Self {
+        Self::MboxPassowrd(value)
     }
 }
 
 impl From<Message> for Messages {
     fn from(value: Message) -> Self {
-        Self::TwoFA(value)
+        Self::MboxPassword(value)
     }
 }
