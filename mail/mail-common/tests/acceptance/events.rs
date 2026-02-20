@@ -763,15 +763,13 @@ mod v6 {
         ctx.mock_get_conversations_page(vec![new_conversation.clone()], None, None, 50, 1, 1)
             .await;
 
-        ctx.mock_get_messages_count_with_ids(
-            vec![label_id.clone(), LabelId::starred()],
-            vec![starred_msg_count.clone(), label_msg_count.clone()],
+        ctx.mock_get_messages_count(
+            Some(vec![starred_msg_count.clone(), label_msg_count.clone()]),
             1,
         )
         .await;
-        ctx.mock_get_conversations_count_with_ids(
-            vec![label_id.clone(), LabelId::starred()],
-            vec![starred_conv_count.clone(), label_conv_count.clone()],
+        ctx.mock_get_conversations_count(
+            Some(vec![starred_conv_count.clone(), label_conv_count.clone()]),
             1,
         )
         .await;

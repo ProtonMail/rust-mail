@@ -18,7 +18,7 @@ use proton_mail_api::services::proton::prelude::{
 };
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use stash::stash::Tether;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tracing::error;
 
 pub struct MailEventSourceV6;
@@ -87,6 +87,25 @@ impl MailEventCache {
             self.fetch_mail_settings(&mut tasks, session);
         }
 
+        // If there are new labels or we have message updates, we currently need to sync
+        // all label counters as we don't have all the information to oportunistically
+        // fetch only the changed counters.
+        let has_new_labels = event
+            .labels
+            .as_ref()
+            .map(|l| l.iter().any(|event| event.action == Action::Create))
+            .unwrap_or_default();
+
+        let should_sync_label_counters = has_new_labels
+            || event.messages.as_ref().is_some_and(|v| !v.is_empty())
+            || event.conversations.as_ref().is_some_and(|v| !v.is_empty());
+
+        if should_sync_label_counters {
+            tracing::info!("Fetching counters");
+            self.fetch_message_counters(&mut tasks, session);
+            self.fetch_conversation_counters(&mut tasks, session);
+        }
+
         let mut first_err = None;
         while let Some(result) = tasks.next().await {
             match result {
@@ -101,43 +120,6 @@ impl MailEventCache {
 
         if let Some(first_err) = first_err {
             return Err(first_err);
-        }
-
-        // For new labels we need to fetch counters
-        let mut label_counter_ids = event
-            .labels
-            .as_ref()
-            .map(|l| {
-                l.iter()
-                    .filter_map(|event| {
-                        (event.action == Action::Create).then_some(event.id.clone())
-                    })
-                    .collect::<HashSet<_>>()
-            })
-            .unwrap_or_default();
-
-        // calculate label counters to fetch
-        label_counter_ids.extend(
-            self.messages
-                .values()
-                .flat_map(|m| &m.label_ids)
-                .cloned()
-                .chain(
-                    self.conversations
-                        .values()
-                        .flat_map(|l| &l.labels)
-                        .map(|l| l.remote_label_id.clone().expect("Is always set")),
-                ),
-        );
-
-        if !label_counter_ids.is_empty() {
-            tracing::info!("Fetching counters");
-            let mut tasks = FuturesUnordered::<FutureTask>::new();
-            self.fetch_message_counters(&mut tasks, session, label_counter_ids.iter().cloned());
-            self.fetch_conversation_counters(&mut tasks, session, label_counter_ids);
-            while let Some(result) = tasks.next().await {
-                result?.apply(self);
-            }
         }
 
         Ok(())
@@ -313,52 +295,30 @@ impl MailEventCache {
         &mut self,
         tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        ids: impl IntoIterator<Item = LabelId>,
     ) {
-        const MAX_ITEMS_PER_REQUEST: usize = 50;
-        tasks.extend(
-            ids.into_iter()
-                .filter(|id| !self.message_counters.contains_key(id))
-                .chunks(MAX_ITEMS_PER_REQUEST)
-                .into_iter()
-                .map(|ids| -> FutureTask {
-                    let session = session.clone();
-                    let ids = ids.collect::<Vec<_>>();
-                    Box::pin(async move {
-                        session
-                            .get_messages_count_for_labels(ids)
-                            .await
-                            .inspect_err(|e| error!("Failed to fetch message counters: {e}"))
-                            .map(|r| FetchData::MessagesCount(r.counts))
-                    })
-                }),
-        );
+        let session = session.clone();
+        tasks.push(Box::pin(async move {
+            session
+                .get_messages_count()
+                .await
+                .inspect_err(|e| error!("Failed to fetch message counters: {e}"))
+                .map(|r| FetchData::MessagesCount(r.counts))
+        }))
     }
 
     fn fetch_conversation_counters(
         &mut self,
         tasks: &mut FuturesUnordered<FutureTask>,
         session: &Session,
-        ids: impl IntoIterator<Item = LabelId>,
     ) {
-        const MAX_ITEMS_PER_REQUEST: usize = 50;
-        tasks.extend(
-            ids.into_iter()
-                .filter(|id| !self.conversation_counters.contains_key(id))
-                .chunks(MAX_ITEMS_PER_REQUEST)
-                .into_iter()
-                .map(|ids| -> FutureTask {
-                    let session = session.clone();
-                    let ids = ids.collect();
-                    Box::pin(async move {
-                        session
-                            .get_conversations_count_for_labels(ids)
-                            .await
-                            .inspect_err(|e| error!("Failed to fetch conversation counters: {e}"))
-                            .map(|r| FetchData::ConversationCount(r.counts))
-                    })
-                }),
-        );
+        let session = session.clone();
+        tasks.push(Box::pin(async move {
+            session
+                .get_conversations_count()
+                .await
+                .inspect_err(|e| error!("Failed to fetch conversation counters: {e}"))
+                .map(|r| FetchData::ConversationCount(r.counts))
+        }))
     }
 
     pub async fn calculate_missing_dependencies(
