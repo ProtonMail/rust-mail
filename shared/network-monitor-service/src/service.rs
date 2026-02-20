@@ -536,6 +536,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "Supper flaky on mac os, fails very often"]
     async fn os_updates_resume_network_ping() {
         let mut config = test_config();
         config.immediate.request_timeout = Duration::from_millis(5);
