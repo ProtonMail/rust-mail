@@ -1,4 +1,5 @@
 use crate::test_utils::test_context::TestContext;
+use proton_core_api::consts::General;
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::services::proton::PutDeleteContacts;
 use proton_core_api::services::proton::common::ApiErrorInfo;
@@ -117,6 +118,21 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path(format!("/api/contacts/{}", &contact.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(GetContactResponse { contact }))
+            //.expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_get_full_contact_does_not_exist(&self, contact_id: ContactId) {
+        Mock::given(method("GET"))
+            .and(path(format!("/api/contacts/{contact_id}")))
+            .respond_with(ResponseTemplate::new(422).set_body_json(ApiErrorInfo {
+                code: General::NotExists as u32,
+                error: None,
+                details: None,
+            }))
             //.expect(1)
             .named(function_name!())
             .mount(self.mock_server())
