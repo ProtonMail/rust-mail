@@ -5,6 +5,7 @@ use futures::StreamExt;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use itertools::Itertools;
+use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{
     Action, ContactId, ContactRootEventV6, LabelId, ProtonCore,
@@ -95,11 +96,18 @@ impl ContactEventCache {
                 .map(|id| -> FutureTask {
                     let session = session.clone();
                     Box::pin(async move {
-                        session
-                            .get_contact(id.clone())
-                            .await
-                            .inspect_err(|e| error!("Failed to fetch {id:?}: {e}"))
-                            .map(|r| FetchData::Contact(id, r.contact.into()))
+                        match session.get_contact(id.clone()).await {
+                            Ok(r) => Ok(FetchData::Contact(id, r.contact.into())),
+                            Err(ApiServiceError::UnprocessableEntity(_, Some(api_error)))
+                                if api_error.code == General::NotExists as u32 =>
+                            {
+                                Ok(FetchData::ContactDoesNotExist(id))
+                            }
+                            Err(e) => {
+                                error!("Failed to fetch {id:?}: {e}");
+                                Err(e)
+                            }
+                        }
                     })
                 }),
         );
@@ -146,6 +154,7 @@ type FutureTask = BoxFuture<'static, Result<FetchData, ApiServiceError>>;
 
 enum FetchData {
     Contact(ContactId, Contact),
+    ContactDoesNotExist(ContactId),
     Labels(Vec<Label>),
 }
 
@@ -154,6 +163,9 @@ impl FetchData {
         match self {
             FetchData::Contact(id, contact) => {
                 cache.contacts.insert(id, contact);
+            }
+            FetchData::ContactDoesNotExist(id) => {
+                tracing::warn!("{id:?} no longer exists on server");
             }
             FetchData::Labels(labels) => {
                 for label in labels {
