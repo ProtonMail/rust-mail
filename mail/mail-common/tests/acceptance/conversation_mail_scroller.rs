@@ -34,7 +34,8 @@ use proton_mail_common::test_utils::{
     test_context::MailUserContextTestExtension,
 };
 use proton_mail_common::{
-    conv_id, conversation, lbl_id, test_utils::test_context::MailTestContext,
+    conv_id, conv_label, conversation, label, lbl_id,
+    test_utils::{db::new_test_connection, test_context::MailTestContext},
 };
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
@@ -2416,6 +2417,117 @@ pub async fn mock_get_conversations_page(
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
+}
+
+/// Regression test for the non-deterministic ordering bug introduced when
+/// `MAX(context_snooze_time, context_time)` was added as the sort key.
+///
+/// Two conversations that share the same effective sort value
+/// (`MAX(snooze, time) = T`) and the same `display_order` have no unique
+/// tiebreaker, so SQLite may return them in either order across separate
+/// queries. The `CachedScrollData` pagination computes its page offset by
+/// calling `cursor.seen_count`, which counts every row satisfying
+/// `MAX(...) = T AND display_order >= cursor.display_order`. When both tied
+/// items satisfy that constraint the count is 1 too high, so the next
+/// `OFFSET cursor_count` skips one of them — it is silently dropped.
+///
+/// Scenario (page_size = 1):
+///   position 1 — `newest`  (MAX = 100, always deterministic)
+///   position 2 — `conv_a`  (context_time = 50, snooze = 0  → MAX = 50)
+///   position 3 — `conv_b`  (context_time =  0, snooze = 50 → MAX = 50)
+///
+/// `conv_a` and `conv_b` share MAX = 50 **and** display_order = 0.
+/// After page 2, cursor.seen_count returns 3 (over-counts by 1) == all,
+/// so `while_fetch_more` returns None and `conv_b` (or `conv_a`) is lost.
+#[tokio::test]
+async fn test_cached_scroller_no_items_lost_with_tied_snooze_and_time() {
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection().await.unwrap();
+
+    let mut lbl = label!(remote_id: lbl_id!("test_label"));
+    tether.tx(async |bond| lbl.save(bond).await).await.unwrap();
+
+    let mut newest = conversation!(remote_id: conv_id!("conv_newest"), display_order: 0);
+    let mut conv_a = conversation!(remote_id: conv_id!("conv_a"), display_order: 0);
+    // conv_b: same MAX(snooze, time) = 50 AND same display_order = 0 as conv_a
+    let mut conv_b = conversation!(remote_id: conv_id!("conv_b"), display_order: 0);
+
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            newest.save(bond).await.unwrap();
+            let mut l = conv_label!(
+                local_conversation_id: newest.local_id,
+                remote_label_id: lbl.remote_id.clone(),
+                local_label_id: lbl.local_id,
+                context_time: 100.into(),
+                context_snooze_time: 0.into()
+            );
+            l.save(bond).await.unwrap();
+            newest.reload(bond).await.unwrap();
+
+            conv_a.save(bond).await.unwrap();
+            let mut l = conv_label!(
+                local_conversation_id: conv_a.local_id,
+                remote_label_id: lbl.remote_id.clone(),
+                local_label_id: lbl.local_id,
+                context_time: 50.into(),
+                context_snooze_time: 0.into()
+            );
+            l.save(bond).await.unwrap();
+            conv_a.reload(bond).await.unwrap();
+
+            conv_b.save(bond).await.unwrap();
+            let mut l = conv_label!(
+                local_conversation_id: conv_b.local_id,
+                remote_label_id: lbl.remote_id.clone(),
+                local_label_id: lbl.local_id,
+                context_time: 0.into(),
+                context_snooze_time: 50.into()
+            );
+            l.save(bond).await.unwrap();
+            conv_b.reload(bond).await.unwrap();
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let local_label_id = lbl.id();
+    let mut scroller = CachedScrollData::<ConversationScrollData>::all(
+        local_label_id,
+        ReadFilter::All,
+        1, // page_size = 1 puts conv_a / conv_b right at the page boundary
+        ScrollOrderDir::Desc,
+        ScrollOrderField::SnoozeTime,
+    );
+
+    let mut all_ids = Vec::new();
+    while let Some(page) = scroller.while_fetch_more(&tether).await.unwrap() {
+        all_ids.extend(page.into_iter().map(|c| c.remote_id));
+    }
+
+    // All three conversations must appear exactly once.
+    // Without the fix `cursor.seen_count` returns 3 (== `all`) after page 2,
+    // so `while_fetch_more` stops early and one tied item is silently dropped.
+    assert_eq!(
+        all_ids.len(),
+        3,
+        "Expected 3 conversations but got {}. \
+         The tied pair caused cursor_count to over-count, dropping one item. \
+         IDs returned: {:?}",
+        all_ids.len(),
+        all_ids,
+    );
+
+    let unique_count = all_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    assert_eq!(unique_count, 3, "Duplicate conversation IDs: {all_ids:?}");
+
+    assert!(all_ids.contains(&conv_id!("conv_newest")));
+    assert!(all_ids.contains(&conv_id!("conv_a")));
+    assert!(all_ids.contains(&conv_id!("conv_b")));
 }
 
 #[function_name::named]

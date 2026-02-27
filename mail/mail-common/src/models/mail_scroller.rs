@@ -74,6 +74,8 @@ where
 
     fn display_order(item: &Self::Item) -> u64;
 
+    fn local_id(item: &Self::Item) -> u64;
+
     fn into_scroll_data(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -145,12 +147,22 @@ impl MessageScrollData {
 
 impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
     fn from(data: MessageScrollData) -> Self {
+        // For DESC ordering the constraint is `local_id >= cursor_local_id`, so
+        // `local_id = 0` → always true → boundary item included.
+        // For ASC ordering the constraint is `local_id <= cursor_local_id`, so
+        // `local_id = u64::MAX` → always true → boundary item included.
+        let local_id = if data.order_dir == ScrollOrderDir::Desc {
+            0
+        } else {
+            i64::MAX as u64
+        };
         Self {
             local_label_id: data.local_label_id,
             unread: data.unread,
             time: data.message_time,
             snooze_time: data.snooze_time,
             display_order: data.display_order,
+            local_id,
             order_dir: data.order_dir,
             order_field: data.order_field,
             _phantom: PhantomData,
@@ -199,10 +211,11 @@ impl ScrollData for MessageScrollData {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
 
-        let (time_op, fallback_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
-            ('>', ">=", "DESC")
+        let (time_op, display_order_op, local_id_op, sort_op) = if order_dir == ScrollOrderDir::Desc
+        {
+            ('>', '>', ">=", "DESC")
         } else {
-            ('<', "<=", "ASC")
+            ('<', '<', "<=", "ASC")
         };
 
         // Calculate the effective cursor time based on order_field
@@ -224,8 +237,8 @@ impl ScrollData for MessageScrollData {
         let cursor_constraint = formatdoc!(
             "(
                 {time_column} {time_op} {cursor_effective_time}
-                OR
-                ({time_column} = {cursor_effective_time} AND messages.display_order {fallback_order_op} ?2)
+                OR ({time_column} = {cursor_effective_time} AND messages.display_order {display_order_op} ?2)
+                OR ({time_column} = {cursor_effective_time} AND messages.display_order = ?2 AND messages.local_id {local_id_op} ?3)
             )"
        );
 
@@ -258,7 +271,8 @@ impl ScrollData for MessageScrollData {
         let order_by = format!(
             " ORDER BY
             {time_column} {sort_op},
-            messages.display_order {sort_op}
+            messages.display_order {sort_op},
+            messages.local_id {sort_op}
         "
         );
 
@@ -298,6 +312,10 @@ impl ScrollData for MessageScrollData {
 
     fn display_order(item: &Self::Item) -> u64 {
         item.display_order
+    }
+
+    fn local_id(item: &Self::Item) -> u64 {
+        item.local_id.map(|id| id.as_u64()).unwrap_or(0)
     }
 
     fn into_scroll_data(
@@ -404,12 +422,22 @@ impl ConversationScrollData {
 
 impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
     fn from(data: ConversationScrollData) -> Self {
+        // For DESC ordering the constraint is `local_id >= cursor_local_id`, so
+        // `local_id = 0` → always true → boundary item included.
+        // For ASC ordering the constraint is `local_id <= cursor_local_id`, so
+        // `local_id = u64::MAX` → always true → boundary item included.
+        let local_id = if data.order_dir == ScrollOrderDir::Desc {
+            0
+        } else {
+            i64::MAX as u64
+        };
         Self {
             local_label_id: data.local_label_id,
             unread: data.unread,
             time: data.conversation_time,
             snooze_time: data.snooze_time,
             display_order: data.display_order,
+            local_id,
             order_dir: data.order_dir,
             order_field: data.order_field,
             _phantom: PhantomData,
@@ -455,10 +483,11 @@ impl ScrollData for ConversationScrollData {
         time: UnixTimestamp,
         snooze_time: UnixTimestamp,
     ) -> String {
-        let (time_op, fallback_order_op, sort_op) = if order_dir == ScrollOrderDir::Desc {
-            ('>', ">=", "DESC")
+        let (time_op, display_order_op, local_id_op, sort_op) = if order_dir == ScrollOrderDir::Desc
+        {
+            ('>', '>', ">=", "DESC")
         } else {
-            ('<', "<=", "ASC")
+            ('<', '<', "<=", "ASC")
         };
 
         let cursor_effective_time = match order_field {
@@ -474,11 +503,11 @@ impl ScrollData for ConversationScrollData {
             }
         };
 
-        let cursor_constraint = format!(
-           "(
+        let cursor_constraint = formatdoc!(
+            "(
                 {time_column} {time_op} {cursor_effective_time}
-                OR
-                ({time_column} = {cursor_effective_time} AND conversations.display_order {fallback_order_op} ?2)
+                OR ({time_column} = {cursor_effective_time} AND conversations.display_order {display_order_op} ?2)
+                OR ({time_column} = {cursor_effective_time} AND conversations.display_order = ?2 AND conversations.local_id {local_id_op} ?3)
             )"
         );
 
@@ -513,7 +542,8 @@ impl ScrollData for ConversationScrollData {
         let order_by = format!(
             " ORDER BY
             {time_column} {sort_op},
-            conversations.display_order {sort_op}
+            conversations.display_order {sort_op},
+            conversations.local_id {sort_op}
         "
         );
         query += &order_by;
@@ -555,6 +585,10 @@ impl ScrollData for ConversationScrollData {
 
     fn display_order(item: &Self::Item) -> u64 {
         item.display_order
+    }
+
+    fn local_id(item: &Self::Item) -> u64 {
+        item.local_id.as_u64()
     }
 
     fn into_scroll_data(
@@ -603,6 +637,7 @@ pub struct ScrollCursor<T: ScrollData> {
     pub time: UnixTimestamp,
     pub snooze_time: UnixTimestamp,
     pub display_order: u64,
+    pub local_id: u64,
     pub order_dir: ScrollOrderDir,
     pub order_field: ScrollOrderField,
 
@@ -649,6 +684,7 @@ impl<T: ScrollData> ScrollCursor<T> {
             time: (i64::MAX as u64).into(),
             snooze_time: (i64::MAX as u64).into(),
             display_order: i64::MAX as u64,
+            local_id: i64::MAX as u64,
             order_dir,
             order_field,
             _phantom: PhantomData,
@@ -667,6 +703,7 @@ impl<T: ScrollData> ScrollCursor<T> {
             time: 0.into(),
             snooze_time: 0.into(),
             display_order: 0,
+            local_id: 0,
             order_dir,
             order_field,
             _phantom: PhantomData,
@@ -835,6 +872,7 @@ impl<T: ScrollData> CachedScrollData<T> {
                 .time(T::time(last))
                 .snooze_time(T::snooze_time(last, self.end.order_field))
                 .display_order(T::display_order(last))
+                .local_id(T::local_id(last))
                 .order_dir(self.end.order_dir)
                 .order_field(self.end.order_field)
                 .build(),
@@ -1137,7 +1175,11 @@ impl<T: ScrollData> ScrollQuery<T> {
 
         let items = T::Model::find(
             query,
-            params![self.cursor.local_label_id, self.cursor.display_order],
+            params![
+                self.cursor.local_label_id,
+                self.cursor.display_order,
+                self.cursor.local_id
+            ],
             tether,
         )
         .await?;
@@ -1166,7 +1208,11 @@ impl<T: ScrollData> ScrollQuery<T> {
 
         T::Model::count(
             query,
-            params![self.cursor.local_label_id, self.cursor.display_order],
+            params![
+                self.cursor.local_label_id,
+                self.cursor.display_order,
+                self.cursor.local_id
+            ],
             tether,
         )
         .await
