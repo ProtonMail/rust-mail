@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<<<<<<< HEAD
+## [mail-uniffi-v0.161.28] - 2026-02-27
+
+### Fixes
+
+- Tie scroller order with local_id for very rare instance of returning duplicate entries
+
+
 ## [mail-uniffi-v0.162.6] - 2026-02-20
 
 ### Fixes
@@ -22,36 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [mail-uniffi-v0.162.4] - 2026-02-16
-## [mail-uniffi-v0.161.28] - 2026-02-27
-
-### Fixes
-
-- Tie scroller order with local_id for very rare instance of returning duplicate entries
-
-
-## [mail-uniffi-v0.161.27] - 2026-02-24
->>>>>>> releases/mail-uniffi/0.161
 
 ### Fixes
 
 - [ET-5882] Missing handler for event provider fetches
 
 
-<<<<<<< HEAD
-## [mail-uniffi-v0.162.3] - 2026-02-10
-
-### Fixes
-
-- Conflicts between Cargo.lock
-
-
-=======
->>>>>>> releases/mail-uniffi/0.161
 ## [mail-uniffi-v0.161.26] - 2026-02-10
 
 ### Fixes
 
 - [ET-5853] 2fa checking and device registration
+
+
+## [mail-uniffi-v0.162.3] - 2026-02-10
+
+### Fixes
+
+- Conflicts between Cargo.lock
 
 
 ## [mail-uniffi-v0.161.25] - 2026-02-06
@@ -71,6 +65,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-5823] mailto parse scheme case sensitivity
 
 
+## [mail-uniffi-v0.161.23] - 2026-02-03
+
+### Features
+
+- [ET-5751] Add session id to the forked session
+
+### Fixes
+
+- [ET-5610] Draft was not found error
+
+
 ## [mail-uniffi-v0.162.1] - 2026-02-03
 
 ### Changed
@@ -82,17 +87,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add AccountDb marker to account related models
 - Make database attribute required
 - Make action-queue database marker agnostic
-
-
-## [mail-uniffi-v0.161.23] - 2026-02-03
-
-### Features
-
-- [ET-5751] Add session id to the forked session
-
-### Fixes
-
-- [ET-5610] Draft was not found error
 
 
 ## [mail-uniffi-v0.161.22] - 2026-02-02
