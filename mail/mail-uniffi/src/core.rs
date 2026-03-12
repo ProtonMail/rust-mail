@@ -2,6 +2,7 @@ mod crypto;
 pub mod datatypes;
 pub mod device;
 mod keychain;
+pub mod measurement;
 pub mod observability;
 mod report_an_issue;
 pub mod resolver;
@@ -11,4 +12,5 @@ pub mod verification;
 
 pub use crypto::*;
 pub use keychain::*;
+pub use measurement::*;
 pub use session::*;
