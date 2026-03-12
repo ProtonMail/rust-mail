@@ -13,7 +13,7 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMeasurements fo
         &self,
         request: PostMeasurementEventRequest,
     ) -> ApiServiceResult<PostMeasurementEventResponse> {
-        Ok(POST!("{MEASUREMENTS_V1}/event")
+        Ok(POST!("{MEASUREMENTS_V1}/measurement")
             .body_json(request)?
             .send_with(self)
             .await?
@@ -25,7 +25,7 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMeasurements fo
         &self,
         request: PostMeasurementEventsRequest,
     ) -> ApiServiceResult<PostMeasurementEventResponse> {
-        Ok(POST!("{MEASUREMENTS_V1}/events")
+        Ok(POST!("{MEASUREMENTS_V1}/measurements")
             .body_json(request)?
             .send_with(self)
             .await?

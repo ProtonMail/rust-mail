@@ -11,7 +11,7 @@ pub mod responses;
 pub use self::request_data::*;
 
 // TODO: This endpoint does not exist YET.
-pub const MEASUREMENTS_V1: &str = "/api/v1/measurement/";
+pub const MEASUREMENTS_V1: &str = "/growth/v1/";
 
 #[allow(async_fn_in_trait)]
 pub trait ProtonMeasurements {
