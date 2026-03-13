@@ -3,9 +3,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Weak;
 use std::time::Duration;
+use tracing::instrument::WithSubscriber;
 use tracing::{debug, error, trace, warn};
 
-use super::Service;
 use crate::datatypes::{
     MeasurementData, MeasurementEventType, MeasurementValue, UnixTimestamp, UnixTimestampMs,
 };
@@ -307,11 +307,10 @@ impl MeasurementService {
     }
 }
 
-#[async_trait::async_trait]
-impl Service for MeasurementService {
-    type Error = CoreContextError;
-
-    async fn init(&self) -> Result<(), Self::Error> {
+impl MeasurementService {
+    #[allow(clippy::result_large_err)]
+    #[tracing::instrument(skip_all)]
+    pub fn init_background_task(&self) -> Result<(), CoreContextError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(CoreContextError::Other(anyhow!(
                 "Could not upgrade UserContext"
@@ -319,31 +318,34 @@ impl Service for MeasurementService {
         };
 
         let ctx_weak = self.ctx.clone();
-        ctx.spawn(async move {
-            let mut interval =
-                tokio::time::interval(Duration::from_secs(MEASUREMENT_SEND_INTERVAL_SECS));
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        ctx.spawn(
+            async move {
+                let mut interval =
+                    tokio::time::interval(Duration::from_secs(MEASUREMENT_SEND_INTERVAL_SECS));
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-            debug!("MeasurementService background task started");
+                debug!("MeasurementService background task started");
 
-            loop {
-                interval.tick().await;
+                loop {
+                    interval.tick().await;
 
-                let Some(ctx) = ctx_weak.upgrade() else {
-                    debug!("MeasurementService: Context dropped, exiting task");
-                    return;
-                };
+                    let Some(ctx) = ctx_weak.upgrade() else {
+                        debug!("MeasurementService: Context dropped, exiting task");
+                        return;
+                    };
 
-                let Some(service) = ctx.get_service_opt::<MeasurementService>() else {
-                    error!("MeasurementService not found in context");
-                    return;
-                };
+                    let Some(service) = ctx.get_service_opt::<MeasurementService>() else {
+                        error!("MeasurementService not found in context");
+                        return;
+                    };
 
-                if let Err(err) = Self::send_measurements(&ctx, service).await {
-                    error!("Error sending measurements: {err:?}");
+                    if let Err(err) = Self::send_measurements(&ctx, service).await {
+                        error!("Error sending measurements: {err:?}");
+                    }
                 }
             }
-        });
+            .with_current_subscriber(),
+        );
 
         Ok(())
     }
