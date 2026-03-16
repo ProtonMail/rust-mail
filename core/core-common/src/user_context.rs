@@ -365,6 +365,17 @@ impl UserContext {
         self.context.task_service().spawn_cancellable(token, task)
     }
 
+    /// Spawns a new task.
+    ///
+    /// Spawned task is bound to this context, i.e. it will get cancelled if
+    /// this context gets cancelled as well.
+    pub fn spawn_cancellable<F>(&self, token: CancellationToken, task: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.context.task_service().spawn_cancellable(token, task)
+    }
+
     /// See [`Self::spawn()`].
     pub fn spawn_ex<Fn, Fut>(&self, task: Fn) -> JoinHandle<Fut::Output>
     where

@@ -2,6 +2,7 @@ use crate::actions::register_actions;
 
 use crate::{MailContext, MailContextResult};
 use proton_core_common::UserContext;
+use tokio_util::sync::CancellationToken;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -53,6 +54,7 @@ impl MailUserContextBuilder {
         self,
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
+        cancellation_token: CancellationToken,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let origin = mail_context.core_context().origin();
 
@@ -81,6 +83,7 @@ impl MailUserContextBuilder {
                 this: Weak::clone(this),
                 mail_context,
                 user_context,
+                cancellation_token,
                 services,
             }
         });
