@@ -6,10 +6,11 @@ use std::time::Duration;
 use tracing::instrument::WithSubscriber;
 use tracing::{debug, error, trace, warn};
 
+use super::InitializationService;
 use crate::datatypes::{
     MeasurementData, MeasurementEventType, MeasurementValue, UnixTimestamp, UnixTimestampMs,
 };
-use crate::models::{Measurement, ModelExtension};
+use crate::models::{InitializedComponent, Measurement, ModelExtension, User};
 use crate::{CoreContextError, UserContext};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::measurements::requests::{
@@ -108,10 +109,16 @@ impl MeasurementService {
             return Ok(());
         }
 
-        let telemetry_enabled = ctx.user_settings().await?.telemetry;
-        if !telemetry_enabled {
-            trace!("Telemetry disabled, not recording measurement");
-            return Ok(());
+        match ctx.user_settings().await {
+            Ok(settings) if !settings.telemetry => {
+                trace!("Telemetry disabled, not recording measurement");
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(CoreContextError::SettingsMissing(_)) => {
+                trace!("Settings not yet available, recording measurement optimistically");
+            }
+            Err(e) => return Err(e),
         }
 
         let measurement_data = MeasurementData {
@@ -320,11 +327,47 @@ impl MeasurementService {
         let ctx_weak = self.ctx.clone();
         ctx.spawn(
             async move {
+                debug!("MeasurementService background task started");
+
+                loop {
+                    let Some(ctx) = ctx_weak.upgrade() else {
+                        error!("MeasurementService: Context dropped during init wait");
+                        return;
+                    };
+                    let watcher = ctx
+                        .get_service::<InitializationService>()
+                        .initialization_watcher()
+                        .clone();
+
+                    let tether = match ctx.stash().connection().await {
+                        Ok(t) => t,
+                        Err(e) => {
+                            error!("MeasurementService: Db connection failed: {e:?}");
+                            return;
+                        }
+                    };
+
+                    // We want to drop context ASAP, otherwise `wait_for_dependencies` will
+                    // hold the context for too long.
+                    drop(ctx);
+
+                    if let Err(e) = InitializedComponent::wait_for_dependencies(
+                        &[User::INIT_KEY],
+                        &watcher,
+                        &tether,
+                    )
+                    .await
+                    {
+                        error!("MeasurementService: Init wait failed: {e:?}, retrying");
+                        continue;
+                    }
+                    break;
+                }
+                debug!("MeasurementService: user settings initialized, starting send loop");
+
                 let mut interval =
                     tokio::time::interval(Duration::from_secs(MEASUREMENT_SEND_INTERVAL_SECS));
                 interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-                debug!("MeasurementService background task started");
 
                 loop {
                     interval.tick().await;
