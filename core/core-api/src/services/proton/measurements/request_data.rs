@@ -18,4 +18,6 @@ pub enum MeasurementEventType {
 pub enum MeasurementValue {
     String(String),
     Bool(bool),
+    Int(u64),
+    Float(f64),
 }

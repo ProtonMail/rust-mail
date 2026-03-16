@@ -31,6 +31,8 @@ impl From<MeasurementEventType> for CoreMeasurementEventType {
 pub enum MeasurementValue {
     String { value: String },
     Bool { value: bool },
+    Int { value: u64 },
+    Float { value: f64 },
 }
 
 impl From<MeasurementValue> for CoreMeasurementValue {
@@ -38,6 +40,8 @@ impl From<MeasurementValue> for CoreMeasurementValue {
         match value {
             MeasurementValue::String { value } => Self::String(value),
             MeasurementValue::Bool { value } => Self::Bool(value),
+            MeasurementValue::Int { value } => Self::Int(value),
+            MeasurementValue::Float { value } => Self::Float(value),
         }
     }
 }
