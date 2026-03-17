@@ -368,7 +368,7 @@ impl AttachmentList {
                 .map_err(RealProtonMailError::from)?;
             Ok(Arc::new(DraftAttachmentListUpdateStream {
                 observer: tokio::sync::Mutex::new(observer),
-                token: ctx.user_context().create_child_cancellation_token(),
+                token: ctx.create_child_cancellation_token(),
             }))
         })
         .await

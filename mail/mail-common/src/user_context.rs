@@ -73,6 +73,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::join;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, instrument};
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
@@ -238,9 +239,20 @@ impl EventSubscriberList {
                 .add::<v6::MailEventSourceV6>(Box::new(event_ctx.clone()), Box::new(event_ctx))
                 .await
             {
-                // Due to current context management, it's possible this can be registered
-                // more than once.
-                Ok(()) | Err(EventLoopError::DuplicateEventSource(_)) => {}
+                Ok(()) => {}
+                Err(EventLoopError::DuplicateEventSource(_)) => {
+                    tracing::debug!("Previous mail event source still registered, removing...");
+                    // Due to current context management, it's possible this can be registered
+                    // more than once. We should cleanup the previous on and re-register
+                    event_poll.remove::<v6::MailEventSourceV6>().await?;
+                    let event_ctx = v6::MailEventLoopV6Context::from(ctx.this.clone());
+                    event_poll
+                        .add::<v6::MailEventSourceV6>(
+                            Box::new(event_ctx.clone()),
+                            Box::new(event_ctx),
+                        )
+                        .await?;
+                }
                 Err(e) => return Err(e.into()),
             }
 
@@ -282,6 +294,13 @@ impl EventSubscriberList {
         ctx.spawn(async move {
             let event_service = core_ctx.event_loop_service();
             let event_poll = event_service.event_poll();
+
+            // The astute reader may wonder why we don't remove the mail event sroucre here. If
+            // we do we risk a race conditon where the source may be removed after we pass the
+            // exists check during the `MailUserContext` creation, leaving us in state of limbo.
+            // The registration fo the event source will perform this check. Removing subscribers
+            // is still okay since they do nothing if the event source no longer exists or
+            // the subscriber handle can't be found.
             for id in subscriber_ids {
                 // It's safe to ignore errors here since the only failure possible
                 // for unsubscribe is that the actor is dead.
@@ -295,7 +314,7 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-
+    cancellation_token: CancellationToken,
     services: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
@@ -314,6 +333,8 @@ impl MailUserContext {
                 tracing::debug_span!(parent: None, "qac", user_id = %user_context.user_id().short_id());
 
             let origin = mail_context.core_context().origin();
+
+            let cancellation_token = user_context_cloned.create_child_cancellation_token();
 
             let mut builder =
                 MailUserContextBuilder::new()
@@ -391,7 +412,7 @@ impl MailUserContext {
                     .with_cyclic_service(QueuesService::new),
             };
 
-            let this = builder.build(mail_context, user_context).await?;
+            let this = builder.build(mail_context, user_context, cancellation_token).await?;
 
             // Catch invalid actions at this stage to interrupt the context creation
             // and avoid infinite error loops.
@@ -1001,7 +1022,8 @@ impl MailUserContext {
     where
         F: Future<Output: Send> + Send + 'static,
     {
-        self.user_context.spawn(task)
+        self.user_context
+            .spawn_cancellable(self.cancellation_token.clone(), task)
     }
 
     /// See [`Self::spawn()`].
@@ -1040,10 +1062,18 @@ impl MailUserContext {
     pub fn image_loader(&self) -> &ImageLoader {
         self.get_service()
     }
+
+    #[must_use]
+    pub fn create_child_cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.child_token()
+    }
 }
 
 impl Drop for MailUserContext {
     fn drop(&mut self) {
+        self.cancellation_token.cancel();
+        self.queues().terminate();
+
         let user_id = self.user_id();
         let session_id = self.session_id();
         tracing::info!(?user_id, ?session_id, "Dropping MailUserContext");
