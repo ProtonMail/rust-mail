@@ -2,12 +2,12 @@ pub use self::keys::*;
 use self::services::{EventLoopService, InitializationService};
 
 use crate::actions::event_poll::EventPoll as EventPollAction;
-use crate::context::services::{MeasurementService, SessionObserverService, UserMetricService};
+use crate::context::services::{SessionObserverService, UserMetricService};
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_core_db, verify_core_db};
 use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
-use crate::services::AddressService;
+use crate::services::{AddressService, MeasurementService};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse, Origin};
 pub use event_loop::CoreEventLoopContext;
 use proton_action_queue::queue::{self, Queue};
@@ -198,6 +198,10 @@ impl UserContext {
                         OnSessionDeletedResponse::Continue
                     }
                 });
+            }
+
+            if let Some(measurement_service) = this.get_service_opt::<MeasurementService>() {
+                measurement_service.init_background_task()?;
             }
 
             if matches!(origin, Origin::App) {

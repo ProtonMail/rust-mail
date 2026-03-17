@@ -92,6 +92,8 @@ impl ToSql for MeasurementEventType {
 pub enum MeasurementValue {
     String(String),
     Bool(bool),
+    Int(u64),
+    Float(f64),
 }
 
 impl From<ApiMeasurementValue> for MeasurementValue {
@@ -99,6 +101,8 @@ impl From<ApiMeasurementValue> for MeasurementValue {
         match value {
             ApiMeasurementValue::String(s) => Self::String(s),
             ApiMeasurementValue::Bool(b) => Self::Bool(b),
+            ApiMeasurementValue::Int(i) => Self::Int(i),
+            ApiMeasurementValue::Float(f) => Self::Float(f),
         }
     }
 }
@@ -108,6 +112,8 @@ impl From<MeasurementValue> for ApiMeasurementValue {
         match value {
             MeasurementValue::String(s) => Self::String(s),
             MeasurementValue::Bool(b) => Self::Bool(b),
+            MeasurementValue::Int(i) => Self::Int(i),
+            MeasurementValue::Float(f) => Self::Float(f),
         }
     }
 }
