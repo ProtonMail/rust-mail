@@ -5,6 +5,7 @@
 mod tests;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
+use crate::utils::parse_url;
 use html5ever::LocalName;
 use html5ever::namespace_url;
 use html5ever::ns;
@@ -159,7 +160,7 @@ fn is_embedded_url(attr: &Attribute) -> Result<bool, url::ParseError> {
 }
 
 fn is_embedded_url_str(uri: &str) -> Result<bool, url::ParseError> {
-    let uri = url::Url::parse(uri)?;
+    let uri = parse_url(uri)?;
     let scheme = uri.scheme();
     Ok(scheme.eq_ignore_ascii_case("cid") ||
         // We disable data: because otherwise the clients might freak out

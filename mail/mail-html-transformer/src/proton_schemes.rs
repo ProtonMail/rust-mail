@@ -5,6 +5,7 @@
 mod tests;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
+use crate::utils::parse_url;
 use kuchikiki::iter::NodeEdge;
 use kuchikiki::{ExpandedName, NodeData, NodeRef};
 use lightningcss::printer::PrinterOptions;
@@ -113,9 +114,7 @@ fn transform_url_to_proton(url: &mut String) -> u64 {
         return 0;
     }
 
-    let base = url::Url::parse("https://dummy.com").unwrap();
-
-    let Ok(resolved) = base.join(url) else {
+    let Ok(resolved) = parse_url(&url) else {
         return 0;
     };
 

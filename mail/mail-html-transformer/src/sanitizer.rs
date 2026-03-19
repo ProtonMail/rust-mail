@@ -3,6 +3,7 @@
 mod tests;
 
 use crate::css_parser::{parse_style_attribute, parse_stylesheet};
+use crate::utils::parse_url;
 use html5ever::ns;
 use html5ever::{LocalName, namespace_url};
 use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
@@ -385,7 +386,7 @@ fn validate_uri_attribute(name: &ExpandedName, value: &mut Attribute) -> bool {
 }
 
 fn is_valid_url(value: &str) -> bool {
-    let Ok(uri) = url::Url::parse(value) else {
+    let Ok(uri) = parse_url(value) else {
         // Invalid urls should be ignored
         return false;
     };
@@ -394,7 +395,7 @@ fn is_valid_url(value: &str) -> bool {
 }
 
 fn is_valid_url_for_attribute(value: &str, attribute_name: &ExpandedName) -> bool {
-    let Ok(uri) = url::Url::parse(value) else {
+    let Ok(uri) = parse_url(value) else {
         // Invalid urls should be ignored
         return false;
     };
@@ -577,7 +578,7 @@ impl<'i> Visitor<'i> for CssUrlVisitor {
                 Token::String(value) => {
                     // This string could be anything, we can't make any assumptions, but
                     // if it happens to be an uri, we can at least check it.
-                    if let Ok(uri) = url::Url::parse(value)
+                    if let Ok(uri) = parse_url(&value)
                         && !is_valid_url_type(uri)
                     {
                         *value = String::new().into();

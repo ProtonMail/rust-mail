@@ -16,6 +16,8 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::LazyLock;
 use url::Url;
 
+use crate::utils::parse_url;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Url: {0}")]
@@ -47,7 +49,7 @@ pub fn strip(document: NodeRef) -> BTreeSet<StrippedUTM> {
         // We don't throw the error back because the transformer doesn't care if the HTML
         // contains invalid links (how is it supposed to recover?)
         // We also don't error because that would short circuit and leave some tags unstripped.
-        let Ok(url) = Url::parse(value) else {
+        let Ok(url) = parse_url(&value) else {
             continue;
         };
 
@@ -102,7 +104,7 @@ pub fn strip_from_url(url: Url) -> Option<Url> {
 
 /// Removes UTM parameters from an `url` defined as a string.
 pub fn strip_from_string(url: &str) -> Result<Option<Url>, url::ParseError> {
-    let url = Url::parse(url)?;
+    let url = parse_url(url)?;
     Ok(strip_from_url(url))
 }
 

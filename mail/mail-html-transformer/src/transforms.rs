@@ -8,9 +8,11 @@ pub mod styles;
 use itertools::Itertools;
 use kuchikiki::{Attribute, NodeData, NodeRef, iter::NodeEdge};
 use std::fmt::Write;
-use url::Url;
 
-use crate::{utils::node_ref_from_str, utm::strip_from_url};
+use crate::{
+    utils::{node_ref_from_str, parse_url},
+    utm::strip_from_url,
+};
 
 /// Determines which stylesheet hardcoded into the binary should be injected into HTML body of the message
 ///
@@ -104,7 +106,7 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     let mut rep = String::with_capacity(text.len() * 2); // TODO:(perf) reserve a bit less capacity
     for word in text.split_whitespace() {
         if word.starts_with("http")
-            && let Ok(url) = Url::parse(word)
+            && let Ok(url) = parse_url(word)
         {
             let scheme = url.scheme();
             if scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https") {
