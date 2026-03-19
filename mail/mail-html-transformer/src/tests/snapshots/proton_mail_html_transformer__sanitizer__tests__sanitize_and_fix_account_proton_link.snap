@@ -1,0 +1,6 @@
+---
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
+expression: result
+---
+<html><head></head><body><a href="https://account.proton.me/thatwouldbealink" style="mso-line-height-rule: exactly; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; line-height: inherit; color: #6d4aff; font-weight: inherit; text-decoration: underline" rel="noreferrer" data-proton-original-style="mso-line-height-rule: exactly; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; line-height: inherit; color: #6d4aff; font-weight: inherit; text-decoration: underline">activation screen</a>
+    </body></html>
