@@ -100,6 +100,19 @@ fn sanitize_styles_no_preserves_style_attributes() {
 }
 
 #[test]
+fn sanitize_and_fix_account_proton_link() {
+    let html = r#"
+        <a href="account.proton.me/thatwouldbealink" style="mso-line-height-rule: exactly; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; line-height: inherit; color: #6d4aff; font-weight: inherit; text-decoration: underline" rel="noreferrer" data-proton-original-style="mso-line-height-rule: exactly; -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; line-height: inherit; color: #6d4aff; font-weight: inherit; text-decoration: underline">activation screen</a>
+    "#;
+
+    let mut t = Transformer::new(html);
+    t.strip_whitelist(StripStyleSheets::No);
+    let result = t.to_string();
+
+    insta::assert_snapshot!(result);
+}
+
+#[test]
 fn sanitize_styles_no_preserves_style_elements() {
     let html =
         r"<html><head><style>.red {color: red;}</style></head><body><p>Hello</p></body></html>";
