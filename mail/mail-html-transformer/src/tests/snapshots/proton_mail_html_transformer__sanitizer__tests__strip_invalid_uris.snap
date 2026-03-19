@@ -29,7 +29,7 @@ div > ul {
 }
 
 tr > ul {
-  list-style: url("");
+  list-style: url("/foo.png");
 }
 
 div {
@@ -58,7 +58,7 @@ ANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4
 <div style=""> invalid_css_style</div>;
 <div style="background: url(&quot;https://foo.bar.com/img.png&quot;)"> valid_css_style</div>;
 
-<img>
+<img src="/foo/bar.png">
 <img src="cid:CE85EADC-1A1B-4730-BE51-610011D32B8C">
 <img src="cid:16eff55b@proton.ch">
 <img>

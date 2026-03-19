@@ -10,7 +10,7 @@ use proton_core_api::{
 };
 use reqwest::Method;
 use stash::stash::StashError;
-use std::{str::FromStr, sync::Weak};
+use std::sync::Weak;
 use thiserror::Error as TError;
 use tracing::instrument;
 use url::Url;
@@ -56,7 +56,7 @@ impl ImageLoader {
             return Ok(AttachmentData::empty());
         }
 
-        let url = Url::from_str(url)?;
+        let url = Url::parse(url)?;
 
         match url.scheme() {
             "cid" => load_cid(&url.path().into())

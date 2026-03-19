@@ -4,6 +4,28 @@ use html5ever::{LocalName, Namespace, QualName, namespace_url, ns, tendril::Tend
 use itertools::Itertools;
 use kuchikiki::{Attribute, ElementData, ExpandedName, NodeDataRef, NodeRef};
 
+/// Prefer this over `url::Url::parse()` because this function gracefully
+/// handles relative urls (adds https automatically).
+pub fn parse_url(input: impl AsRef<str>) -> Result<url::Url, url::ParseError> {
+    let input = input.as_ref();
+    let url = url::Url::parse(input);
+
+    match url {
+        Err(url::ParseError::RelativeUrlWithoutBase) => {
+            let input = if input.starts_with("//") {
+                // Schemaless
+                format!("https:{input}")
+            } else if input.starts_with('/') {
+                format!("https://localhost{input}")
+            } else {
+                format!("https://{input}")
+            };
+            url::Url::parse(&input)
+        }
+        els => els,
+    }
+}
+
 pub fn attribute_name(name: impl ToString) -> ExpandedName {
     // For some reason HTML attributes MUST not have a namespace
     ExpandedName::new(ns!(), name.to_string())
@@ -113,6 +135,7 @@ impl NodeRefExt for NodeRef {
 #[cfg(test)]
 mod tests {
     use insta::assert_debug_snapshot;
+    use test_case::test_case;
 
     use super::*;
 
@@ -214,5 +237,15 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_debug_snapshot!(result);
+    }
+
+    #[test_case("http://foo.com/bar" => "http://foo.com/bar" ; "with_http")]
+    #[test_case("https://foo.com/bar" => "https://foo.com/bar" ; "with_https")]
+    #[test_case("foo.com/bar" => "https://foo.com/bar" ; "relative")]
+    #[test_case("//foo.com/bar" => "https://foo.com/bar" ; "schemaless")]
+    #[test_case("/image.png" => "https://localhost/image.png" ; "relative_with_slash")]
+    #[test_case("cid://foo.com/bar" => "cid://foo.com/bar" ; "cid")]
+    fn test_parse_url_roundtrip(input: &str) -> String {
+        parse_url(input).unwrap().to_string()
     }
 }

@@ -5,10 +5,6 @@ fn remove_from_url() {
     let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
     let new_url = strip_from_string(url).unwrap().unwrap();
     assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
-
-    let url = "panda"; // Invalid URL
-    let new_url = strip_from_string(url);
-    assert!(new_url.is_err());
 }
 
 #[test]
