@@ -10,4 +10,5 @@ ignore = [
 "RUSTSEC-2026-0007", # integer overflow (E)
 "RUSTSEC-2026-0009", # `time` vuln - DOS with Stack overflow => upgrade to at least 0.3.47
 "RUSTSEC-2026-0037", # quinn-proto DOS => upgrade to at least 0.11.14
+"RUSTSEC-2026-0049", # rustls-webpki CRL matching logic => upgrade to at least 0.103.10 (blocked by muon pinning rustls 0.22)
 ]
