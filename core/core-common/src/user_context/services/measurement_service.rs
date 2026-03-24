@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use parking_lot::RwLock;
+use proton_core_api::service::ApiServiceResult;
 use std::collections::HashMap;
 use std::sync::Weak;
 use std::time::Duration;
@@ -150,7 +151,7 @@ impl MeasurementService {
         ctx: &UserContext,
         service: &MeasurementService,
         events: PostMeasurementEventsRequest,
-    ) -> anyhow::Result<()> {
+    ) -> ApiServiceResult<()> {
         if events.is_empty() {
             return Ok(());
         }
@@ -257,14 +258,27 @@ impl MeasurementService {
             .collect::<Vec<_>>();
         let events = Self::build_events_from_measurements(measurements, session_start_ms);
 
-        Self::send_single_batch(ctx, service, events).await?;
+        let result = Self::send_single_batch(ctx, service, events).await;
+
+        if let Err(error) = result.as_ref() {
+            // In case this IS a network issue, we won't remove measurements.
+            if error.is_network_failure() {
+                return result.map_err(Into::into);
+            }
+            // Even if the API failed to process our measurements (muon is using exponential backoff)
+            // we want to remove them from the queue.
+            // That includes issues like 500 on server side or incorrect request on ours.
+            warn!(
+                "MeasurementService: API returned error. Collected measurements will be deleted from the queue anyway"
+            );
+        }
 
         let mut tether = ctx.account_stash().connection().await?;
         tether
             .tx(async |tx| Measurement::delete_by_ids(measurement_ids, tx).await)
             .await?;
 
-        Ok(())
+        result.map_err(Into::into)
     }
 
     async fn send_measurements(
