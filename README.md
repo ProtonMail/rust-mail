@@ -1,5 +1,9 @@
 # Proton Rust libraries
 
+-------------------
+*This repo is now archived and relocated to [a new location](https://github.com/ProtonMail/clients/tree/main/project/mail/rust)
+-------------------
+
 This repo maps part of the Core proton REST api. It's designed so that each team can extend this
 with their own primitives, requests and domain types as needed.
 
